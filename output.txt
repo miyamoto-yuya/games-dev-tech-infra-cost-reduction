@@ -1,27 +1,28 @@
+
 EC2 :
 Instance Name	Instance ID	Instance Type	台数	EBS Type	EBS Size	Max CPU	Max CPU Time
-gleg-cmn-admin01	i-0e463affcb58320ec	t3.medium	1	gp3	100	99.98	2025-04-07T04:38:00+00:00
-gleg-dev-pre01	i-0cecb5eba41ec9cd8	t3.small	1	gp3	100	2.4	2025-03-26T13:53:00+00:00
+gleg-cmn-admin01	i-0e463affcb58320ec	t3.medium	1	gp3	100	99.98	2025-04-07T04:39:00+00:00
+gleg-dev-pre01	i-0cecb5eba41ec9cd8	t3.small	1	gp3	100	2.4	2025-03-26T13:54:00+00:00
 gleg-cmn-build01	i-0bdd3e5052687c0fd	c5a.4xlarge	1	gp3	1500	78.14	2025-03-13T08:15:00+00:00
-gleg-dev-sandbox01	i-09df96b6d84c48903	m6a.large	1	gp3	130	95.64	2025-03-29T14:58:00+00:00
+gleg-dev-sandbox01	i-09df96b6d84c48903	m6a.large	1	gp3	130	95.64	2025-03-29T15:00:00+00:00
 gleg-stg-backend-ecs01	i-00c52e872473aac5d	t3.small	1	gp3	30	0.0	N/A
-gleg-prd-en-backend-ecs-org	i-00ab81230b043ca8d	t3.small	1	gp3	40	2.69	2025-03-26T16:48:00+00:00
-gleg-prd-ntk-backend-ecs-org	i-0f26efbf8d98680ed	t3.small	1	gp3	40	2.81	2025-04-08T02:53:00+00:00
-gleg-prd-tw-backend-ecs-org	i-0966af1dbe809916f	t3.small	1	gp3	40	2.84	2025-04-08T15:08:00+00:00
-gleg-cmn-unity-cache-server	i-0a24b440d66ffd085	t3a.medium	1	gp3	100	32.41	2025-03-27T10:29:00+00:00
+gleg-prd-en-backend-ecs-org	i-00ab81230b043ca8d	t3.small	1	gp3	40	2.69	2025-03-26T16:50:00+00:00
+gleg-prd-ntk-backend-ecs-org	i-0f26efbf8d98680ed	t3.small	1	gp3	40	2.81	2025-04-08T02:55:00+00:00
+gleg-prd-tw-backend-ecs-org	i-0966af1dbe809916f	t3.small	1	gp3	40	2.84	2025-04-08T15:10:00+00:00
+gleg-cmn-unity-cache-server	i-0a24b440d66ffd085	t3a.medium	1	gp3	100	32.41	2025-03-27T10:30:00+00:00
 gleg-prd-en-web-AUTOSCALE	None	c6a.large	2	gp3	40	59.41	2025-03-24T07:05:00+00:00
 gleg-prd-twnet-web-AUTOSCALE	None	m5a.large	2	gp3	40	4.91	2025-03-26T04:00:00+00:00
 redash-server	i-0c319f2d65e5e9af9	r6a.xlarge	1	gp3	50	0.0	N/A
-gleg-prd-hs-tw-backend-ecs-org	i-01a478263a1e5a678	t3.small	1	gp3	40	2.75	2025-04-08T03:54:00+00:00
+gleg-prd-hs-tw-backend-ecs-org	i-01a478263a1e5a678	t3.small	1	gp3	40	2.75	2025-04-08T03:55:00+00:00
 gleg-prd-ntk-web-AUTOSCALE	None	c6a.xlarge	2	gp3	40	50.08	2025-03-24T07:35:00+00:00
 gleg-prd-el-en-web-AUTOSCALE	None	c6a.large	2	gp3	40	21.38	2025-03-24T07:35:00+00:00
 gleg-prd-h365-tw-web-AUTOSCALE	None	c6a.large	2	gp3	40	15.29	2025-03-24T07:15:00+00:00
 gleg-prd-hs-tw-web-AUTOSCALE	None	c6a.large	2	gp3	40	5.13	2025-03-16T09:35:00+00:00
 gleg-prd-h365-en-backend-ecs-org	i-0352bd9fe62a25da9	t3.small	1	gp3	40	2.81	2025-03-26T00:55:00+00:00
 redash-server2	i-0a89e66bf5dbcc9d4	r6a.xlarge	1	gp3	50	1.87	2025-03-21T00:55:00+00:00
-gleg-prd-el-en-backend-ecs-org	i-054801ef5037ee710	t3.small	1	gp3	40	2.74	2025-04-08T21:44:00+00:00
-gleg-prd-el-tw-backend-ecs-org	i-083cfa49d2e4310b3	t3.small	1	gp3	40	2.92	2025-04-08T12:29:00+00:00
-gleg-prd-h365-tw-backend-ecs-org	i-005bcf6e53f6dad08	t3.small	1	gp3	40	2.85	2025-04-08T14:29:00+00:00
+gleg-prd-el-en-backend-ecs-org	i-054801ef5037ee710	t3.small	1	gp3	40	2.74	2025-04-08T21:45:00+00:00
+gleg-prd-el-tw-backend-ecs-org	i-083cfa49d2e4310b3	t3.small	1	gp3	40	2.92	2025-04-08T12:30:00+00:00
+gleg-prd-h365-tw-backend-ecs-org	i-005bcf6e53f6dad08	t3.small	1	gp3	40	2.85	2025-04-08T14:30:00+00:00
 gleg-prd-tw-web-AUTOSCALE	None	c6a.xlarge	2	gp3	40	73.81	2025-03-24T07:00:00+00:00
 gleg-prd-bana-tw-backend-ecs-org	i-070fd643c17cbfd8c	t3.small	1	gp3	40	2.79	2025-04-08T18:40:00+00:00
 gleg-prd-bana-tw-web-AUTOSCALE	None	c6a.large	2	gp3	40	7.94	2025-04-06T12:10:00+00:00
@@ -32,14 +33,14 @@ gleg-prd-el-tw-web-AUTOSCALE	None	c6a.large	2	gp3	40	75.38	2025-03-24T07:05:00+0
 Redis :
 Cluster Name	Instance Type	台数	Max CPU	Max CPU Time
 gleg-dev-redis01	cache.t3.small	1	4.18	2025-03-20T03:40:00+00:00
-gleg-prd-hs01	cache.r6g.large	2	7.23	2025-03-29T21:00:00+00:00
-gleg-prd-redis01	cache.m6g.large	6	4.34	2025-04-02T21:00:00+00:00
+gleg-prd-hs01	cache.r6g.large	2	7.84	2025-04-02T21:01:00+00:00
+gleg-prd-redis01	cache.m6g.large	6	4.39	2025-04-02T21:01:00+00:00
 gleg-stg-redis01	cache.t3.small	1	3.97	2025-03-18T03:10:00+00:00
 
 RDS :
 Cluster Name	Instance Type	台数	Max CPU	Max CPU Time
 gleg-dev-db01	db.t4g.large	1	11.99	2025-03-12T09:15:00+00:00
-gleg-prd-db01	db.r6g.2xlarge	2	35.91	2025-04-06T02:05:00+00:00
+gleg-prd-db01	db.r6g.2xlarge	2	36.2	2025-04-06T02:06:00+00:00
 gleg-prd-hs01	db.t4g.medium	2	25.76	2025-03-19T23:20:00+00:00
 gleg-stg-db01	db.t3.medium	1	46.04	2025-03-23T13:45:00+00:00
 
