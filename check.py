@@ -64,6 +64,9 @@ def get_ec2_instances():
             # インスタンスステータスが終了済みの場合、スキップ
             if instance["State"]["Name"] == "terminated":
                 continue
+
+            if instance["State"]["Name"] == "stopped":
+                continue
             
             instance_id = instance["InstanceId"]
             instance_type = instance["InstanceType"]
@@ -238,12 +241,44 @@ def get_redis_clusters():
 
     return clusters_info
 
+def get_memcache_clusters():
+    elasticache = boto3.client("elasticache")
+    response = elasticache.describe_cache_clusters()
+    clusters_info = []
+
+    for cluster in response["CacheClusters"]:
+        # Memcachedクラスターのみを対象とする
+        if cluster["Engine"] != "memcached":
+            continue
+            
+        cluster_name = cluster["CacheClusterId"]
+        instance_type = cluster["CacheNodeType"]
+        node_count = cluster["NumCacheNodes"]
+        
+        # CPU使用率を取得
+        cpu, ts = get_max_cpu_utilization(
+            cluster_name,
+            namespace='AWS/ElastiCache',
+            dimension_name='CacheClusterId'
+        )
+
+        clusters_info.append([
+            cluster_name,
+            instance_type,
+            node_count,
+            cpu,
+            ts.isoformat() if ts else None
+        ])
+
+    return clusters_info
+
 import sys
 def main():
     ec2_instances = get_ec2_instances()
     rds_clusters = get_rds_clusters()
     docdb_clusters = get_docdb_clusters()
     redis_clusters = get_redis_clusters()
+    memcache_clusters = get_memcache_clusters()
 
     with open("output.txt", "w", encoding="utf-8") as f:
 
@@ -257,6 +292,11 @@ def main():
         print("\nRedis :")
         print("Cluster Name\tInstance Type\t台数\tMax CPU\tMax CPU Time")
         for cluster in redis_clusters:
+            print("\t".join(map(str, cluster)))
+
+        print("\nMemcached :")
+        print("Cluster Name\tInstance Type\t台数\tMax CPU\tMax CPU Time")
+        for cluster in memcache_clusters:
             print("\t".join(map(str, cluster)))
 
         print("\nRDS :")

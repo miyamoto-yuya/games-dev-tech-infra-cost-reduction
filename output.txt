@@ -1,48 +1,53 @@
 
 EC2 :
 Instance Name	Instance ID	Instance Type	台数	EBS Type	EBS Size	Max CPU	Max CPU Time
-gleg-cmn-admin01	i-0e463affcb58320ec	t3.medium	1	gp3	100	99.98	2025-04-07T04:39:00+00:00
-gleg-dev-pre01	i-0cecb5eba41ec9cd8	t3.small	1	gp3	100	2.4	2025-03-26T13:54:00+00:00
-gleg-cmn-build01	i-0bdd3e5052687c0fd	c5a.4xlarge	1	gp3	1500	78.14	2025-03-13T08:15:00+00:00
-gleg-dev-sandbox01	i-09df96b6d84c48903	m6a.large	1	gp3	130	95.64	2025-03-29T15:00:00+00:00
-gleg-stg-backend-ecs01	i-00c52e872473aac5d	t3.small	1	gp3	30	0.0	N/A
-gleg-prd-en-backend-ecs-org	i-00ab81230b043ca8d	t3.small	1	gp3	40	2.69	2025-03-26T16:50:00+00:00
-gleg-prd-ntk-backend-ecs-org	i-0f26efbf8d98680ed	t3.small	1	gp3	40	2.81	2025-04-08T02:55:00+00:00
-gleg-prd-tw-backend-ecs-org	i-0966af1dbe809916f	t3.small	1	gp3	40	2.84	2025-04-08T15:10:00+00:00
-gleg-cmn-unity-cache-server	i-0a24b440d66ffd085	t3a.medium	1	gp3	100	32.41	2025-03-27T10:30:00+00:00
-gleg-prd-en-web-AUTOSCALE	None	c6a.large	2	gp3	40	59.41	2025-03-24T07:05:00+00:00
-gleg-prd-twnet-web-AUTOSCALE	None	m5a.large	2	gp3	40	4.91	2025-03-26T04:00:00+00:00
-redash-server	i-0c319f2d65e5e9af9	r6a.xlarge	1	gp3	50	0.0	N/A
-gleg-prd-hs-tw-backend-ecs-org	i-01a478263a1e5a678	t3.small	1	gp3	40	2.75	2025-04-08T03:55:00+00:00
-gleg-prd-ntk-web-AUTOSCALE	None	c6a.xlarge	2	gp3	40	50.08	2025-03-24T07:35:00+00:00
-gleg-prd-el-en-web-AUTOSCALE	None	c6a.large	2	gp3	40	21.38	2025-03-24T07:35:00+00:00
-gleg-prd-h365-tw-web-AUTOSCALE	None	c6a.large	2	gp3	40	15.29	2025-03-24T07:15:00+00:00
-gleg-prd-hs-tw-web-AUTOSCALE	None	c6a.large	2	gp3	40	5.13	2025-03-16T09:35:00+00:00
-gleg-prd-h365-en-backend-ecs-org	i-0352bd9fe62a25da9	t3.small	1	gp3	40	2.81	2025-03-26T00:55:00+00:00
-redash-server2	i-0a89e66bf5dbcc9d4	r6a.xlarge	1	gp3	50	1.87	2025-03-21T00:55:00+00:00
-gleg-prd-el-en-backend-ecs-org	i-054801ef5037ee710	t3.small	1	gp3	40	2.74	2025-04-08T21:45:00+00:00
-gleg-prd-el-tw-backend-ecs-org	i-083cfa49d2e4310b3	t3.small	1	gp3	40	2.92	2025-04-08T12:30:00+00:00
-gleg-prd-h365-tw-backend-ecs-org	i-005bcf6e53f6dad08	t3.small	1	gp3	40	2.85	2025-04-08T14:30:00+00:00
-gleg-prd-tw-web-AUTOSCALE	None	c6a.xlarge	2	gp3	40	73.81	2025-03-24T07:00:00+00:00
-gleg-prd-bana-tw-backend-ecs-org	i-070fd643c17cbfd8c	t3.small	1	gp3	40	2.79	2025-04-08T18:40:00+00:00
-gleg-prd-bana-tw-web-AUTOSCALE	None	c6a.large	2	gp3	40	7.94	2025-04-06T12:10:00+00:00
-gleg-dev-sandbox02	i-03a986cd9e334b23c	m6a.large	1	gp3	100	24.86	2025-04-10T07:40:00+00:00
-gleg-cmn-build02	i-0d30d3b7f2efab8ad	c6a.xlarge	1	gp3	1500	100.0	2025-04-10T04:05:00+00:00
-gleg-prd-el-tw-web-AUTOSCALE	None	c6a.large	2	gp3	40	75.38	2025-03-24T07:05:00+00:00
+__NewRelicPlugin,OldLog	i-a0af25b9	t2.medium	1	gp2	20	2.38	2025-06-25T00:20:00+00:00
+__ElasticSearch_Ca	i-5a2461a8	r3.xlarge	1	gp2	200	0.19	2025-07-03T07:45:00+00:00
+__ElasticSearch_Ca	i-5a2461a8	r3.xlarge	1	gp2	30	0.19	2025-07-03T07:45:00+00:00
+AigisMantis	i-00825af5	t2.medium	1	gp2	30	4.38	2025-06-30T06:35:00+00:00
+AigisWordPressV2	i-40853fe2	t2.small	1	gp2	60	3.4	2025-07-07T01:00:00+00:00
+__Zabbix	i-df63427d	t2.small	1	gp2	8	3.7	2025-06-29T19:00:00+00:00
+aigis_na_share	i-1226bc9d	t2.medium	1	gp2	500	68.0	2025-07-01T10:25:00+00:00
+aigis_na_share	i-1226bc9d	t2.medium	1	gp2	8	68.0	2025-07-01T10:25:00+00:00
+__Grafana	i-0d033eb7e58dc54ca	t2.micro	1	gp2	8	6.07	2025-07-17T01:56:00+00:00
+aigis-build-server_20180126	i-02053244f997e3be8	c4.8xlarge	1	gp2	256	98.78	2025-07-22T15:06:00+00:00
+aigis-build-server_20180126	i-02053244f997e3be8	c4.8xlarge	1	gp3	2560	98.78	2025-07-22T15:06:00+00:00
+sandboxvpc	i-038696bb8cffd0536	t2.micro	1	gp2	8	4.3	2025-07-23T02:31:00+00:00
+__Growi20200122	i-0abfe998b4ffd660b	t2.medium	1	gp2	200	24.41	2025-07-07T01:20:00+00:00
+Cradle-Rails7	i-01f420f712df1bb64	r6i.2xlarge	1	gp3	100	11.3	2025-07-24T04:06:00+00:00
+__GitLab	i-08927957da9d8d8fd	m3.medium	1	gp2	40	3.51	2025-06-26T05:30:00+00:00
+__WindowsServer2022	i-0de84e0b6d5892a8c	m4.xlarge	1	gp3	30	98.87	2025-06-26T06:05:00+00:00
+__WindowsServer2022	i-0de84e0b6d5892a8c	m4.xlarge	1	gp2	100	98.87	2025-06-26T06:05:00+00:00
+gp-dev-tomcat9-corretto11	i-02133f25434de805d	t3.small	1	gp2	8	9.94	2025-07-02T03:10:00+00:00
+ios-review-tomcat9-corretto11	i-0f3deb156a2421465	t3.medium	1	gp2	8	8.7	2025-07-15T05:21:00+00:00
+ios-sbx-tomcat9-corretto11	i-0cd53b07d8db32000	t3.medium	1	gp2	8	15.45	2025-06-26T00:55:00+00:00
+ios-productlogin-tomcat9-corretto11	None	m5.large	2	gp2	8	56.17	2025-07-03T05:55:00+00:00
+development-tomcat9-corretto11	i-0094588e24b358e2c	t3.medium	1	gp3	16	12.03	2025-07-02T00:50:00+00:00
+development2-tomcat9-corretto11	i-04235367c8d35e6c7	t3.medium	1	gp3	8	98.48	2025-07-23T15:16:00+00:00
+ios-sbxlogin-tomcat9-corretto11	i-0e483e3f2a817c2f9	t3.small	1	gp2	8	51.48	2025-07-07T09:55:00+00:00
+ios-dev-tomcat9-corretto11	i-01e97797147d7813f	t3.medium	1	gp2	8	10.09	2025-07-08T04:00:00+00:00
+dmm-sbx-tomcat9-corretto11	i-0d816def46dc0dac6	t3.medium	1	gp2	8	18.31	2025-07-03T01:25:00+00:00
+gp-sbx-tomcat9-corretto11	i-0f824a4c3aec05e70	t3.medium	1	gp2	8	12.27	2025-07-15T23:41:00+00:00
+ios-product-tomcat9-corretto11	None	c5.2xlarge	4	gp2	8	8.6	2025-06-26T09:40:00+00:00
+dmm-product-r18-tomcat9-corretto11	None	c5.2xlarge	14	gp3	16	10.6	2025-06-26T09:40:00+00:00
+dmm-product-all-tomcat9-corretto11	None	c5.2xlarge	6	gp3	16	9.46	2025-06-26T09:40:00+00:00
+gp-product-tomcat9-corretto11	None	c5.2xlarge	2	gp2	8	7.67	2025-06-26T09:40:00+00:00
 
 Redis :
 Cluster Name	Instance Type	台数	Max CPU	Max CPU Time
-gleg-dev-redis01	cache.t3.small	1	4.18	2025-03-20T03:40:00+00:00
-gleg-prd-hs01	cache.r6g.large	2	7.84	2025-04-02T21:01:00+00:00
-gleg-prd-redis01	cache.m6g.large	6	4.39	2025-04-02T21:01:00+00:00
-gleg-stg-redis01	cache.t3.small	1	3.97	2025-03-18T03:10:00+00:00
+
+Memcached :
+Cluster Name	Instance Type	台数	Max CPU	Max CPU Time
+aigis-product	cache.r5.large	2	1.93	2025-07-01T03:25:00+00:00
+sandboxvpc	cache.t2.small	1	6.03	2025-07-08T20:40:00+00:00
 
 RDS :
 Cluster Name	Instance Type	台数	Max CPU	Max CPU Time
-gleg-dev-db01	db.t4g.large	1	11.99	2025-03-12T09:15:00+00:00
-gleg-prd-db01	db.r6g.2xlarge	2	36.2	2025-04-06T02:06:00+00:00
-gleg-prd-hs01	db.t4g.medium	2	25.76	2025-03-19T23:20:00+00:00
-gleg-stg-db01	db.t3.medium	1	46.04	2025-03-23T13:45:00+00:00
+aigis-gamelog-cluster	db.r5.2xlarge, db.r5.xlarge	2	11.44	2025-07-22T23:57:00+00:00
+aigis-gamelog-cluster-2	db.r7g.2xlarge, db.r7g.xlarge	2	20.71	2025-06-26T12:00:00+00:00
+qcqpbcdaqu6dhi54	db.m5.xlarge	1	36.41	2025-07-01T02:55:00+00:00
+qcqpbcdaqu6dhi54-replica	db.m5.xlarge	1	10.88	2025-06-28T15:45:00+00:00
+zabbix	db.t3.medium	1	21.39	2025-07-22T19:27:00+00:00
 
 DocumentDB :
 Cluster Name	Instance Type	台数	Max CPU	Max CPU Time
