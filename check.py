@@ -178,7 +178,7 @@ def get_ec2_instances():
     
     response = ec2.describe_instances()
     instances_info = []
-    instance_data = defaultdict(lambda: {"count": 0, "ebs_info": set(), "instance_ids": [], "auto_scaling_group": None})
+    instance_data = defaultdict(lambda: {"count": 0, "ebs_info": set(), "instance_ids": [], "auto_scaling_group": None, "states": set()})
 
     for reservation in response["Reservations"]:
         for instance in reservation["Instances"]:
@@ -186,11 +186,11 @@ def get_ec2_instances():
             if instance["State"]["Name"] == "terminated":
                 continue
 
-            if instance["State"]["Name"] == "stopped":
-                continue
+            # 停止中のインスタンスも取得する（stopped状態のスキップを削除）
             
             instance_id = instance["InstanceId"]
             instance_type = instance["InstanceType"]
+            instance_state = instance["State"]["Name"]  # running, stopped, stopping, pending など
             
             # インスタンス名の取得
             instance_name = "N/A"
@@ -211,6 +211,7 @@ def get_ec2_instances():
             instance_data[key]["count"] += 1
             instance_data[key]["instance_ids"].append(instance_id)  # インスタンスIDをリストに追加
             instance_data[key]["auto_scaling_group"] = auto_scaling_group_name  # Auto Scaling グループ名を追加
+            instance_data[key]["states"].add(instance_state)  # 状態を追加
             
             # EBS情報の取得
             for block_device in instance.get("BlockDeviceMappings", []):
@@ -227,9 +228,22 @@ def get_ec2_instances():
         ebs_info = data["ebs_info"]
         instance_ids = data["instance_ids"]
         auto_scaling_group_name = data["auto_scaling_group"]
+        states = data["states"]
 
         # 表示するインスタンスIDの設定
         instance_id_display = instance_ids[0] if count == 1 else None
+
+        # 状態を日本語で表示（複数の状態がある場合はカンマ区切り）
+        state_display = ", ".join(sorted(states))
+        # 状態を日本語に変換
+        state_map = {
+            "running": "稼働中",
+            "stopped": "停止中",
+            "stopping": "停止中",
+            "pending": "起動中",
+            "shutting-down": "終了中"
+        }
+        state_display_jp = ", ".join([state_map.get(s, s) for s in sorted(states)])
 
         # インスタンスIDがNoneの場合、Auto Scaling グループ名でCPU使用率を取得
         max_avg_cpu = 0.0
@@ -266,6 +280,7 @@ def get_ec2_instances():
                     instance_id_display,
                     instance_type,
                     count,
+                    state_display_jp,
                     ebs[0],
                     ebs[1],
                     max_avg_cpu,
@@ -619,6 +634,27 @@ def get_cost_optimization_recommendations():
                 current_config_str = ', '.join(current_config_info) if current_config_info else ''
                 recommended_config_str = ', '.join(recommended_config_info) if recommended_config_info else ''
                 
+                # currentResourceSummaryとrecommendedResourceSummaryを取得
+                current_resource_summary = rec.get('currentResourceSummary')
+                recommended_resource_summary = rec.get('recommendedResourceSummary')
+                
+                # 値が辞書やオブジェクトの場合は文字列に変換
+                if current_resource_summary:
+                    if isinstance(current_resource_summary, dict):
+                        current_resource_summary = str(current_resource_summary)
+                    elif not isinstance(current_resource_summary, str):
+                        current_resource_summary = str(current_resource_summary)
+                else:
+                    current_resource_summary = ''
+                
+                if recommended_resource_summary:
+                    if isinstance(recommended_resource_summary, dict):
+                        recommended_resource_summary = str(recommended_resource_summary)
+                    elif not isinstance(recommended_resource_summary, str):
+                        recommended_resource_summary = str(recommended_resource_summary)
+                else:
+                    recommended_resource_summary = ''
+                
                 # 説明と理由（空でない場合のみ）
                 description_str = description[:200] if description else ''
                 reason_str = reason[:200] if reason else ''
@@ -636,7 +672,9 @@ def get_cost_optimization_recommendations():
                     'description': description_str,
                     'reason': reason_str,
                     'current_config': current_config_str,
-                    'recommended_config': recommended_config_str
+                    'recommended_config': recommended_config_str,
+                    'current_resource_summary': str(current_resource_summary)[:200] if current_resource_summary else '',
+                    'recommended_resource_summary': str(recommended_resource_summary)[:200] if recommended_resource_summary else ''
                 })
                 
     except Exception as e:
@@ -653,13 +691,58 @@ def get_cost_optimization_recommendations():
             'description': f'Failed to retrieve recommendations from Cost Optimization Hub (us-east-1): {str(e)}',
             'reason': '',
             'current_config': '',
-            'recommended_config': ''
+            'recommended_config': '',
+            'current_resource_summary': '',
+            'recommended_resource_summary': ''
         })
     
     return recommendations_by_action
 
 import sys
+from html import escape
+from datetime import datetime
+
+def escape_html(text):
+    """HTMLエスケープを行う"""
+    if text is None:
+        return ''
+    return escape(str(text))
+
+def generate_html_table(headers, rows, section_title=""):
+    """HTMLテーブルを生成"""
+    html = []
+    if section_title:
+        html.append(f'<h2>{escape_html(section_title)}</h2>')
+    html.append('<table class="data-table">')
+    html.append('<thead><tr>')
+    for header in headers:
+        html.append(f'<th>{escape_html(header)}</th>')
+    html.append('</tr></thead>')
+    html.append('<tbody>')
+    for row in rows:
+        html.append('<tr>')
+        for cell in row:
+            html.append(f'<td>{escape_html(cell)}</td>')
+        html.append('</tr>')
+    html.append('</tbody>')
+    html.append('</table>')
+    return '\n'.join(html)
+
 def main():
+    # AWSアカウントIDを取得
+    try:
+        sts = boto3.client('sts')
+        account_id = sts.get_caller_identity()['Account']
+    except Exception:
+        account_id = 'unknown'
+    
+    # 現在の日付を取得（YYYYMMDD形式）
+    current_date = datetime.now().strftime('%Y%m%d')
+    
+    # ファイル名を生成
+    html_filename = f"{account_id}-{current_date}.html"
+    txt_filename = f"{account_id}-{current_date}.txt"
+    
     ec2_instances = get_ec2_instances()
     rds_clusters = get_rds_clusters()
     docdb_clusters = get_docdb_clusters()
@@ -667,12 +750,292 @@ def main():
     memcache_clusters = get_memcache_clusters()
     cost_recommendations = get_cost_optimization_recommendations()
 
-    with open("output.txt", "w", encoding="utf-8") as f:
+    html_content = []
+    
+    # HTMLヘッダー
+    html_content.append('''<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS コスト最適化レポート</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #0066cc;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #0066cc;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-left: 5px solid #0066cc;
+            padding-left: 10px;
+        }
+        h3 {
+            color: #0066cc;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .data-table th {
+            background-color: #0066cc;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+        .data-table th:hover {
+            background-color: #0052a3;
+        }
+        .data-table th::after {
+            content: ' ↕';
+            opacity: 0.5;
+            font-size: 0.8em;
+        }
+        .data-table th.sort-asc::after {
+            content: ' ↑';
+            opacity: 1;
+        }
+        .data-table th.sort-desc::after {
+            content: ' ↓';
+            opacity: 1;
+        }
+        .data-table td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .data-table tr:hover {
+            background-color: #f0f8ff;
+        }
+        .data-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .action-type {
+            background-color: #e6f2ff;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .action-type h3 {
+            margin-top: 0;
+            color: #0066cc;
+        }
+    </style>
+</head>
+<body>
+    <h1>AWS コスト最適化レポート</h1>
+    <h2>リソース情報</h2>
+''')
 
+    # EC2
+    if ec2_instances:
+        html_content.append('<h3>EC2</h3>')
+        headers = ["Instance Name", "Instance ID", "Instance Type", "台数", "稼働状況", "EBS Type", "EBS Size", 
+                   "Max Avg CPU", "Max Avg CPU Time", "Max CPU", "Max CPU Time"]
+        rows = [instance for instance in ec2_instances]
+        html_content.append(generate_html_table(headers, rows, ""))
+
+    # Redis
+    if redis_clusters:
+        html_content.append('<h3>Redis</h3>')
+        headers = ["Cluster Name", "Instance Type", "台数", "Max Avg CPU", "Max Avg CPU Time", 
+                   "Max CPU", "Max CPU Time", "Max Avg Memory", "Max Avg Memory Time", 
+                   "Max Memory", "Max Memory Time"]
+        rows = [cluster for cluster in redis_clusters]
+        html_content.append(generate_html_table(headers, rows, ""))
+
+    # Memcached
+    if memcache_clusters:
+        html_content.append('<h3>Memcached</h3>')
+        headers = ["Cluster Name", "Instance Type", "台数", "Max Avg CPU", "Max Avg CPU Time", 
+                   "Max CPU", "Max CPU Time", "Max Avg Memory", "Max Avg Memory Time", 
+                   "Max Memory", "Max Memory Time"]
+        rows = [cluster for cluster in memcache_clusters]
+        html_content.append(generate_html_table(headers, rows, ""))
+
+    # RDS
+    if rds_clusters:
+        html_content.append('<h3>RDS</h3>')
+        headers = ["Cluster Name", "Instance Type", "台数", "Max Avg CPU", "Max Avg CPU Time", 
+                   "Max CPU", "Max CPU Time"]
+        rows = [cluster for cluster in rds_clusters]
+        html_content.append(generate_html_table(headers, rows, ""))
+
+    # DocumentDB
+    if docdb_clusters:
+        html_content.append('<h3>DocumentDB</h3>')
+        headers = ["Cluster Name", "Instance Type", "台数", "Max Avg CPU", "Max Avg CPU Time", 
+                   "Max CPU", "Max CPU Time"]
+        rows = [cluster for cluster in docdb_clusters]
+        html_content.append(generate_html_table(headers, rows, ""))
+
+    # 削減提案
+    html_content.append('<h2>削減提案</h2>')
+    for action_type in sorted(cost_recommendations.keys()):
+        recommendations = cost_recommendations[action_type]
+        if recommendations:
+            html_content.append(f'<div class="action-type">')
+            html_content.append(f'<h3>Action Type: {escape_html(action_type)}</h3>')
+            
+            headers = ["Resource ID", "Estimated Monthly Savings", "Estimated Savings Percentage"]
+            has_current_resource_type = any(r.get('current_resource_type') for r in recommendations)
+            has_resource_type = any(r.get('resource_type') for r in recommendations)
+            has_description = any(r.get('description') for r in recommendations)
+            has_reason = any(r.get('reason') for r in recommendations)
+            has_current_config = any(r.get('current_config') for r in recommendations)
+            has_recommended_config = any(r.get('recommended_config') for r in recommendations)
+            has_current_resource_summary = any(r.get('current_resource_summary') for r in recommendations)
+            has_recommended_resource_summary = any(r.get('recommended_resource_summary') for r in recommendations)
+            
+            if has_current_resource_type:
+                headers.append("Current Resource Type")
+            if has_resource_type:
+                headers.append("Resource Type")
+            if has_description:
+                headers.append("Description")
+            if has_reason:
+                headers.append("Reason")
+            if has_current_config:
+                headers.append("Current Configuration")
+            if has_recommended_config:
+                headers.append("Recommended Configuration")
+            if has_current_resource_summary:
+                headers.append("Current Resource Summary")
+            if has_recommended_resource_summary:
+                headers.append("Recommended Resource Summary")
+            
+            rows = []
+            for rec in recommendations:
+                row = [
+                    rec.get('resource_id', ''),
+                    rec.get('estimated_monthly_savings', ''),
+                    rec.get('estimated_savings_percentage', '')
+                ]
+                if has_current_resource_type:
+                    row.append(rec.get('current_resource_type', ''))
+                if has_resource_type:
+                    row.append(rec.get('resource_type', ''))
+                if has_description:
+                    row.append(rec.get('description', ''))
+                if has_reason:
+                    row.append(rec.get('reason', ''))
+                if has_current_config:
+                    row.append(rec.get('current_config', ''))
+                if has_recommended_config:
+                    row.append(rec.get('recommended_config', ''))
+                if has_current_resource_summary:
+                    row.append(rec.get('current_resource_summary', ''))
+                if has_recommended_resource_summary:
+                    row.append(rec.get('recommended_resource_summary', ''))
+                rows.append(row)
+            
+            html_content.append(generate_html_table(headers, rows))
+            html_content.append('</div>')
+
+    # HTMLフッター
+    html_content.append('''
+    <script>
+        function sortTable(table, columnIndex, isNumeric = false) {
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const currentSort = table.dataset.sortColumn;
+            const currentOrder = table.dataset.sortOrder || 'asc';
+            
+            // ソート方向を決定
+            let sortOrder = 'asc';
+            if (currentSort == columnIndex && currentOrder === 'asc') {
+                sortOrder = 'desc';
+            }
+            
+            // テーブルにソート情報を保存
+            table.dataset.sortColumn = columnIndex;
+            table.dataset.sortOrder = sortOrder;
+            
+            // ヘッダーのソートクラスを更新
+            const headers = table.querySelectorAll('th');
+            headers.forEach((th, index) => {
+                th.classList.remove('sort-asc', 'sort-desc');
+                if (index == columnIndex) {
+                    th.classList.add('sort-' + sortOrder);
+                }
+            });
+            
+            // 行をソート
+            rows.sort((a, b) => {
+                const aText = a.cells[columnIndex].textContent.trim();
+                const bText = b.cells[columnIndex].textContent.trim();
+                
+                let aValue, bValue;
+                
+                if (isNumeric) {
+                    // 数値として比較（数値以外の文字を除去）
+                    aValue = parseFloat(aText.replace(/[^0-9.-]/g, '')) || 0;
+                    bValue = parseFloat(bText.replace(/[^0-9.-]/g, '')) || 0;
+                } else {
+                    // 文字列として比較
+                    aValue = aText.toLowerCase();
+                    bValue = bText.toLowerCase();
+                }
+                
+                if (aValue < bValue) {
+                    return sortOrder === 'asc' ? -1 : 1;
+                }
+                if (aValue > bValue) {
+                    return sortOrder === 'asc' ? 1 : -1;
+                }
+                return 0;
+            });
+            
+            // ソートした行を再配置
+            rows.forEach(row => tbody.appendChild(row));
+        }
+        
+        // ページ読み込み時にすべてのテーブルにソート機能を追加
+        document.addEventListener('DOMContentLoaded', function() {
+            const tables = document.querySelectorAll('.data-table');
+            tables.forEach(table => {
+                const headers = table.querySelectorAll('th');
+                headers.forEach((header, index) => {
+                    header.addEventListener('click', function() {
+                        // 数値列かどうかを判定（CPU、台数、サイズなど）
+                        const headerText = header.textContent.trim();
+                        const isNumeric = /CPU|台数|Size|Savings|Percentage|Time/i.test(headerText);
+                        sortTable(table, index, isNumeric);
+                    });
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+''')
+
+    # HTMLファイルに出力
+    with open(html_filename, "w", encoding="utf-8") as f:
+        f.write('\n'.join(html_content))
+    
+    # テキストファイルにも出力（互換性のため）
+    with open(txt_filename, "w", encoding="utf-8") as f:
         sys.stdout = f
 
         print("\nEC2 :")
-        print("Instance Name\tInstance ID\tInstance Type\t台数\tEBS Type\tEBS Size\tMax Avg CPU\tMax Avg CPU Time\tMax CPU\tMax CPU Time")
+        print("Instance Name\tInstance ID\tInstance Type\t台数\t稼働状況\tEBS Type\tEBS Size\tMax Avg CPU\tMax Avg CPU Time\tMax CPU\tMax CPU Time")
         for instance in ec2_instances:
             print("\t".join(map(str, instance)))
 
@@ -697,12 +1060,10 @@ def main():
             print("\t".join(map(str, cluster)))
 
         print("\n削減提案 :")
-        # ActionType別にグループ化して表示
         for action_type in sorted(cost_recommendations.keys()):
             recommendations = cost_recommendations[action_type]
             if recommendations:
                 print(f"\nAction Type: {action_type}")
-                # resourceId、estimatedMonthlySavings、estimatedSavingsPercentage、currentResourceTypeを表示
                 headers = ["Resource ID", "Estimated Monthly Savings", "Estimated Savings Percentage"]
                 has_current_resource_type = any(r.get('current_resource_type') for r in recommendations)
                 has_resource_type = any(r.get('resource_type') for r in recommendations)
@@ -710,6 +1071,8 @@ def main():
                 has_reason = any(r.get('reason') for r in recommendations)
                 has_current_config = any(r.get('current_config') for r in recommendations)
                 has_recommended_config = any(r.get('recommended_config') for r in recommendations)
+                has_current_resource_summary = any(r.get('current_resource_summary') for r in recommendations)
+                has_recommended_resource_summary = any(r.get('recommended_resource_summary') for r in recommendations)
                 
                 if has_current_resource_type:
                     headers.append("Current Resource Type")
@@ -723,6 +1086,10 @@ def main():
                     headers.append("Current Configuration")
                 if has_recommended_config:
                     headers.append("Recommended Configuration")
+                if has_current_resource_summary:
+                    headers.append("Current Resource Summary")
+                if has_recommended_resource_summary:
+                    headers.append("Recommended Resource Summary")
                 
                 print("\t".join(headers))
                 
@@ -744,7 +1111,25 @@ def main():
                         row.append(rec.get('current_config', ''))
                     if has_recommended_config:
                         row.append(rec.get('recommended_config', ''))
+                    if has_current_resource_summary:
+                        row.append(rec.get('current_resource_summary', ''))
+                    if has_recommended_resource_summary:
+                        row.append(rec.get('recommended_resource_summary', ''))
                     print("\t".join(map(str, row)))
+    
+    # 標準出力を元に戻す
+    sys.stdout = sys.__stdout__
+    
+    # S3アップロードコマンドとCloudFrontのURLを表示
+    print("\n" + "="*80)
+    print("ファイルのアップロードコマンド:")
+    print("="*80)
+    print(f"aws s3 cp {html_filename} s3://infra-test-935762823806/cost-reduction/ --profile ii-dev")
+    print("\n" + "="*80)
+    print("アクセス先のURL:")
+    print("="*80)
+    print(f"https://d1zflfjtk1ntnd.cloudfront.net/cost-reduction/{html_filename}")
+    print("="*80 + "\n")
 
 if __name__ == "__main__":
     main()
