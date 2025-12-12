@@ -1,26 +1,7 @@
-# 出力ファイル
-*.txt
-*.html
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-.venv
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
+# 出力ファイル（check.py実行時に生成されるファイルのみ）
+# AWSアカウントID-年月日形式のファイル
+[0-9]*-[0-9]*.txt
+[0-9]*-[0-9]*.html
+# 互換性のためoutput.txtとoutput.htmlも除外
+output.txt
+output.html
