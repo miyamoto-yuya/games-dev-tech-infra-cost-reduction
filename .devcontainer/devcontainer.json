@@ -16,7 +16,8 @@
       }
     },
     "mounts": [
-      "source=${env:HOME}/.aws,target=/root/.aws,type=bind,consistency=cached"
+      "source=${env:HOME}/.aws,target=/root/.aws,type=bind,consistency=cached",
+      "source=${env:HOME}/.ssh,target=/root/.ssh,type=bind,consistency=cached"
     ]
   }
   

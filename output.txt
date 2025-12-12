@@ -1,53 +1,62 @@
 
 EC2 :
-Instance Name	Instance ID	Instance Type	台数	EBS Type	EBS Size	Max CPU	Max CPU Time
-__NewRelicPlugin,OldLog	i-a0af25b9	t2.medium	1	gp2	20	2.38	2025-06-25T00:20:00+00:00
-__ElasticSearch_Ca	i-5a2461a8	r3.xlarge	1	gp2	200	0.19	2025-07-03T07:45:00+00:00
-__ElasticSearch_Ca	i-5a2461a8	r3.xlarge	1	gp2	30	0.19	2025-07-03T07:45:00+00:00
-AigisMantis	i-00825af5	t2.medium	1	gp2	30	4.38	2025-06-30T06:35:00+00:00
-AigisWordPressV2	i-40853fe2	t2.small	1	gp2	60	3.4	2025-07-07T01:00:00+00:00
-__Zabbix	i-df63427d	t2.small	1	gp2	8	3.7	2025-06-29T19:00:00+00:00
-aigis_na_share	i-1226bc9d	t2.medium	1	gp2	500	68.0	2025-07-01T10:25:00+00:00
-aigis_na_share	i-1226bc9d	t2.medium	1	gp2	8	68.0	2025-07-01T10:25:00+00:00
-__Grafana	i-0d033eb7e58dc54ca	t2.micro	1	gp2	8	6.07	2025-07-17T01:56:00+00:00
-aigis-build-server_20180126	i-02053244f997e3be8	c4.8xlarge	1	gp2	256	98.78	2025-07-22T15:06:00+00:00
-aigis-build-server_20180126	i-02053244f997e3be8	c4.8xlarge	1	gp3	2560	98.78	2025-07-22T15:06:00+00:00
-sandboxvpc	i-038696bb8cffd0536	t2.micro	1	gp2	8	4.3	2025-07-23T02:31:00+00:00
-__Growi20200122	i-0abfe998b4ffd660b	t2.medium	1	gp2	200	24.41	2025-07-07T01:20:00+00:00
-Cradle-Rails7	i-01f420f712df1bb64	r6i.2xlarge	1	gp3	100	11.3	2025-07-24T04:06:00+00:00
-__GitLab	i-08927957da9d8d8fd	m3.medium	1	gp2	40	3.51	2025-06-26T05:30:00+00:00
-__WindowsServer2022	i-0de84e0b6d5892a8c	m4.xlarge	1	gp3	30	98.87	2025-06-26T06:05:00+00:00
-__WindowsServer2022	i-0de84e0b6d5892a8c	m4.xlarge	1	gp2	100	98.87	2025-06-26T06:05:00+00:00
-gp-dev-tomcat9-corretto11	i-02133f25434de805d	t3.small	1	gp2	8	9.94	2025-07-02T03:10:00+00:00
-ios-review-tomcat9-corretto11	i-0f3deb156a2421465	t3.medium	1	gp2	8	8.7	2025-07-15T05:21:00+00:00
-ios-sbx-tomcat9-corretto11	i-0cd53b07d8db32000	t3.medium	1	gp2	8	15.45	2025-06-26T00:55:00+00:00
-ios-productlogin-tomcat9-corretto11	None	m5.large	2	gp2	8	56.17	2025-07-03T05:55:00+00:00
-development-tomcat9-corretto11	i-0094588e24b358e2c	t3.medium	1	gp3	16	12.03	2025-07-02T00:50:00+00:00
-development2-tomcat9-corretto11	i-04235367c8d35e6c7	t3.medium	1	gp3	8	98.48	2025-07-23T15:16:00+00:00
-ios-sbxlogin-tomcat9-corretto11	i-0e483e3f2a817c2f9	t3.small	1	gp2	8	51.48	2025-07-07T09:55:00+00:00
-ios-dev-tomcat9-corretto11	i-01e97797147d7813f	t3.medium	1	gp2	8	10.09	2025-07-08T04:00:00+00:00
-dmm-sbx-tomcat9-corretto11	i-0d816def46dc0dac6	t3.medium	1	gp2	8	18.31	2025-07-03T01:25:00+00:00
-gp-sbx-tomcat9-corretto11	i-0f824a4c3aec05e70	t3.medium	1	gp2	8	12.27	2025-07-15T23:41:00+00:00
-ios-product-tomcat9-corretto11	None	c5.2xlarge	4	gp2	8	8.6	2025-06-26T09:40:00+00:00
-dmm-product-r18-tomcat9-corretto11	None	c5.2xlarge	14	gp3	16	10.6	2025-06-26T09:40:00+00:00
-dmm-product-all-tomcat9-corretto11	None	c5.2xlarge	6	gp3	16	9.46	2025-06-26T09:40:00+00:00
-gp-product-tomcat9-corretto11	None	c5.2xlarge	2	gp2	8	7.67	2025-06-26T09:40:00+00:00
+Instance Name	Instance ID	Instance Type	台数	EBS Type	EBS Size	Max Avg CPU	Max Avg CPU Time	Max CPU	Max CPU Time
+ii-stash01	i-00c8a522729482c4f	t3.medium	1	gp3	30	2.21	2025-12-09T06:09:00+00:00	10.5	2025-12-09T06:09:00+00:00
+work-gw01	i-0bdda7e0dda0da05b	t3.nano	1	gp3	8	8.65	2025-11-13T23:00:00+00:00	36.4	2025-12-10T22:59:00+00:00
+cmn-g-work-al2023	i-0ae2d1806b13a18b0	t3a.medium	1	gp3	60	24.33	2025-12-08T05:19:00+00:00	47.74	2025-11-25T05:20:00+00:00
 
 Redis :
-Cluster Name	Instance Type	台数	Max CPU	Max CPU Time
+Cluster Name	Instance Type	台数	Max Avg CPU	Max Avg CPU Time	Max CPU	Max CPU Time	Max Avg Memory	Max Avg Memory Time	Max Memory	Max Memory Time
 
 Memcached :
-Cluster Name	Instance Type	台数	Max CPU	Max CPU Time
-aigis-product	cache.r5.large	2	1.93	2025-07-01T03:25:00+00:00
-sandboxvpc	cache.t2.small	1	6.03	2025-07-08T20:40:00+00:00
+Cluster Name	Instance Type	台数	Max Avg CPU	Max Avg CPU Time	Max CPU	Max CPU Time	Max Avg Memory	Max Avg Memory Time	Max Memory	Max Memory Time
 
 RDS :
-Cluster Name	Instance Type	台数	Max CPU	Max CPU Time
-aigis-gamelog-cluster	db.r5.2xlarge, db.r5.xlarge	2	11.44	2025-07-22T23:57:00+00:00
-aigis-gamelog-cluster-2	db.r7g.2xlarge, db.r7g.xlarge	2	20.71	2025-06-26T12:00:00+00:00
-qcqpbcdaqu6dhi54	db.m5.xlarge	1	36.41	2025-07-01T02:55:00+00:00
-qcqpbcdaqu6dhi54-replica	db.m5.xlarge	1	10.88	2025-06-28T15:45:00+00:00
-zabbix	db.t3.medium	1	21.39	2025-07-22T19:27:00+00:00
+Cluster Name	Instance Type	台数	Max Avg CPU	Max Avg CPU Time	Max CPU	Max CPU Time
+aurora-test	N/A	0	None	None	None	None
 
 DocumentDB :
-Cluster Name	Instance Type	台数	Max CPU	Max CPU Time
+Cluster Name	Instance Type	台数	Max Avg CPU	Max Avg CPU Time	Max CPU	Max CPU Time
+
+削減提案 :
+
+Action Type: Delete
+Resource ID	Estimated Monthly Savings	Estimated Savings Percentage	Current Resource Type
+kikuchi-kenji-stg-masterdata01-01	USD 53.29	100.0%	RdsDbInstance
+kikuchi-kenji-stg-userdata01-01	USD 53.29	100.0%	RdsDbInstance
+vol-0af11cc095d06cb38	USD 7.20	100.0%	EbsVolume
+vol-039ad6f7bd7d70287	USD 2.88	100.0%	EbsVolume
+vol-0edbd015d4ec987a5	USD 2.88	100.0%	EbsVolume
+vol-00c8dd6200363f747	USD 0.96	100.0%	EbsVolume
+vol-0d156f4a6818b5ac9	USD 0.96	100.0%	EbsVolume
+vol-0eb2192b3f303012a	USD 0.96	100.0%	EbsVolume
+vol-06f84d7c3ebd90f1e	USD 0.96	100.0%	EbsVolume
+vol-0b51b95645a69798d	USD 0.96	100.0%	EbsVolume
+vol-03f1bdc9f92bd40da	USD 0.77	100.0%	EbsVolume
+vol-0b74934efca2ba48a	USD 0.77	100.0%	EbsVolume
+vol-06233e67f5646e9fa	USD 0.77	100.0%	EbsVolume
+vol-0d9e40a666bbde8b9	USD 0.77	100.0%	EbsVolume
+vol-0e61f0e9d611330e8	USD 0.77	100.0%	EbsVolume
+
+Action Type: MigrateToGraviton
+Resource ID	Estimated Monthly Savings	Estimated Savings Percentage	Current Resource Type
+i-028dc24a9d251ab0f	USD 46.28	60.0%	Ec2Instance
+i-00c8a522729482c4f	USD 8.18	21.0%	Ec2Instance
+i-0ae2d1806b13a18b0	USD 4.23	12.0%	Ec2Instance
+example-cf-ecs-static-20250808093621265200000009	USD 2.92	20.0%	Ec2AutoScalingGroup
+i-0bdda7e0dda0da05b	USD 0.36	21.0%	Ec2Instance
+
+Action Type: PurchaseReservedInstances
+Resource ID	Estimated Monthly Savings	Estimated Savings Percentage	Current Resource Type
+N/A	USD 60.75	41.0%	RdsReservedInstances
+N/A	USD 10.24	55.0%	ElastiCacheReservedInstances
+
+Action Type: Rightsize
+Resource ID	Estimated Monthly Savings	Estimated Savings Percentage	Current Resource Type
+atlantis/atlantis	USD 27.00	88.0%	EcsService
+
+Action Type: Upgrade
+Resource ID	Estimated Monthly Savings	Estimated Savings Percentage	Current Resource Type
+vol-060c25de91ec6ebf8	USD 0.60	20.0%	EbsVolume
+vol-014872301cf0403e5	USD 0.60	20.0%	EbsVolume
+vol-01f3ed273292af5f3	USD 0.60	20.0%	EbsVolume
