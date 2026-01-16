@@ -2,8 +2,8 @@
 EC2 :
 Instance Name	Instance ID	Instance Type	台数	EBS Type	EBS Size	Max CPU	Max CPU Time
 ii-stash01	i-00c8a522729482c4f	t3.medium	1	gp3	30	3.46	2025-12-18T02:40:00+00:00
-work-gw01	i-0bdda7e0dda0da05b	t3.nano	1	gp3	8	10.2	2026-01-04T22:58:00+00:00
-cmn-g-work-al2023	i-0ae2d1806b13a18b0	t3a.medium	1	gp3	60	35.74	2026-01-08T10:38:00+00:00
+work-gw01	i-0bdda7e0dda0da05b	t3.nano	1	gp3	8	10.2	2026-01-04T22:57:00+00:00
+cmn-g-work-al2023	i-0ae2d1806b13a18b0	t3a.medium	1	gp3	60	35.74	2026-01-08T10:37:00+00:00
 
 Redis :
 Cluster Name	Instance Type	台数	Max CPU	Max CPU Time

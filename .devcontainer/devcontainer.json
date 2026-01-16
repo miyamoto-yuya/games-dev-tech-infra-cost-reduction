@@ -3,6 +3,13 @@
     "build": {
       "dockerfile": "Dockerfile"
     },
+    "features": {
+      "ghcr.io/devcontainers/features/docker-in-docker:2": {
+        "version": "latest",
+        "moby": true,
+        "dockerDashComposeVersion": "v2"
+      }
+    },
     "customizations": {
       "vscode": {
         "settings": {
@@ -11,12 +18,15 @@
         "extensions": [
           "ms-python.python",
           "amazonwebservices.aws-toolkit-vscode",
-          "ms-vscode.remote-containers"
+          "ms-vscode.remote-containers",
+          "hashicorp.terraform",
+          "ms-azuretools.vscode-docker"
         ]
       }
     },
     "mounts": [
-      "source=${env:HOME}/.aws,target=/root/.aws,type=bind,consistency=cached"
-    ]
+      "source=${localEnv:USERPROFILE}/.aws,target=/root/.aws,type=bind,consistency=cached"
+    ],
+    "runArgs": ["--privileged"]
   }
   
