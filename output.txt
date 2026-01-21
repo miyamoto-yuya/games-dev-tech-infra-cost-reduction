@@ -1,18 +1,46 @@
 
 EC2 :
-Instance Name	Instance ID	Instance Type	台数	EBS Type	EBS Size	Max CPU	Max CPU Time
-ii-stash01	i-00c8a522729482c4f	t3.medium	1	gp3	30	3.46	2025-12-18T02:40:00+00:00
-work-gw01	i-0bdda7e0dda0da05b	t3.nano	1	gp3	8	10.2	2026-01-04T22:58:00+00:00
-cmn-g-work-al2023	i-0ae2d1806b13a18b0	t3a.medium	1	gp3	60	35.74	2026-01-08T10:38:00+00:00
+Instance Name	Instance ID	Instance Type	台数	EBS Type	EBS Size	CPU AvgMax	CPU Max	Timestamp
+GG-Admin	i-0fa6582ef613ff751	t3.large	1	gp2	50	51.1	65.0	2025-12-27T10:05:00+00:00
+-DEV- SOCKET	i-0d63c1e6c19f3463b	t3.small	1	gp2	30	3.05	14.77	2026-01-06T06:31:00+00:00
+-DEV- API	i-0c974052fb37903ec	t3.small	1	gp2	50	19.11	53.02	2025-12-24T09:00:00+00:00
+<DBG> API	i-037ed3809044ebe8e	t3.medium	1	gp2	30	61.38	75.42	2026-01-13T06:51:00+00:00
+[STG] SOCKET	i-08c0f27ca58f50a40	t3.small	1	gp2	30	2.81	13.6	2026-01-06T17:51:00+00:00
+[STG] API	i-0693f355363c4ff1b	t3.medium	1	gp2	50	58.58	67.84	2026-01-13T06:31:00+00:00
+<DBG> SOCKET	i-0ac38cb2cc40c6000	t3.small	1	gp2	30	2.29	10.98	2026-01-06T07:11:00+00:00
+《LOG》KPI-Log-Stream	None	t3a.large	2	gp2	50	1.48	5.08	2026-01-06T13:06:00+00:00
+《LOG》PLAY-Log-Stream	None	t3a.large	3	gp2	50	12.4	44.12	2025-12-29T03:20:00+00:00
+【PROD】 API-AutoScale	None	c5a.2xlarge	7	gp2	50	44.22	72.96	2025-12-29T07:35:00+00:00
+openvpn	i-0254f56ffc88a18b2	t3.small	1	gp2	8	6.06	28.99	2026-01-13T06:41:00+00:00
+【PROD】 SOCKET1	i-040013d690c3b41e6	c5a.large	1	gp2	30	7.45	29.7	2025-12-17T06:15:00+00:00
+【PROD】 SOCKET2	i-0d884be06c6387bd7	c5a.large	1	gp2	30	8.45	33.69	2025-12-17T06:15:00+00:00
+【PROD】 SOCKET3	i-0bc1b4affd55e25c9	c5a.large	1	gp2	30	11.31	37.61	2025-12-17T06:15:00+00:00
+【PROD】 SOCKET4	i-05c896b7ecb3ef04b	c5a.large	1	gp2	30	7.48	29.81	2025-12-17T06:15:00+00:00
+【PROD】 SOCKET6	i-01f11d9ff7978fb75	c5a.large	1	gp2	30	4.21	20.62	2025-12-17T06:40:00+00:00
+【PROD】 SOCKET5	i-0309b423534524034	c5a.large	1	gp2	30	3.95	19.35	2025-12-17T06:40:00+00:00
+[STG] API_2	i-0cb0d9ba5dffa64f2	t3.medium	1	gp2	50	12.19	42.67	2025-12-17T08:25:00+00:00
 
 Redis :
-Cluster Name	Instance Type	台数	Max CPU	Max CPU Time
+Cluster Name	Instance Type	台数	CPU AvgMax	CPU Max	Timestamp
+gg-admin-2-002	cache.t4g.micro	2	5.83	15.1	2026-01-04T03:17:00+00:00
+gg-dbg-002	cache.t4g.micro	1	9.73	15.8	2025-12-26T10:25:00+00:00
+gg-dev-002	cache.t4g.micro	1	4.48	9.7	2025-12-17T03:15:00+00:00
+gg-prod-cache1-2-002	cache.r6g.large	2	4.64	10.21	2025-12-20T03:15:00+00:00
+gg-prod-cache2-2-002	cache.r6g.large	2	5.13	10.62	2026-01-14T13:07:00+00:00
+gg-prod-cache3-2-002	cache.r6g.large	2	17.38	49.57	2026-01-03T15:37:00+00:00
+gg-stg-002	cache.t4g.micro	1	4.42	7.27	2026-01-07T03:17:00+00:00
 
 Memcached :
-Cluster Name	Instance Type	台数	Max CPU	Max CPU Time
+Cluster Name	Instance Type	台数	CPU AvgMax	CPU Max	Timestamp
 
 RDS :
-Cluster Name	Instance Type	台数	Max CPU	Max CPU Time
+Cluster Name	Instance Type	台数	CPU AvgMax	CPU Max	Timestamp
+gg-admin	db.r6g.large	2	27.19	43.96	2026-01-12T09:01:00+00:00
 
 DocumentDB :
-Cluster Name	Instance Type	台数	Max CPU	Max CPU Time
+Cluster Name	Instance Type	台数	CPU AvgMax	CPU Max	Timestamp
+gg-dbg-002	db.t3.medium	1	28.24	53.04	2025-12-26T10:40:00+00:00
+gg-dev-002	db.t3.medium	1	20.7	28.88	2026-01-13T09:52:00+00:00
+gg-prod-battle-002	db.r6g.2xlarge	2	50.1	59.61	2025-12-29T15:15:00+00:00
+gg-prod-user-002	db.r6g.8xlarge	2	25.35	39.93	2025-12-29T15:05:00+00:00
+gg-stg-002	db.t3.medium	1	22.24	25.16	2025-12-18T08:00:00+00:00

@@ -2,8 +2,533 @@ import boto3
 import json
 import os
 import uuid
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+
+
+# SSO プロファイル設定（~/.aws/config から抽出）
+SSO_PROFILES = {
+    'crave': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '555109320113',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'polaris': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '590183989053',
+        'sso_role_name': 'ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'vivid': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '228493844662',
+        'sso_role_name': 'ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'seng': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '694512004038',
+        'sso_role_name': 'ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'doo': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '396695244664',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'routine': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '145023108898',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'enkuri': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '121763773786',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'leg': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '149762279086',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'meteo': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '104238392782',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'monmusu': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '513395620689',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'aigisu': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '758002851130',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'twinkle': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '953444013299',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'techronos': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '219129075341',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'cthulhu': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '472156860599',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'tlo': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '497458598267',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'koihime': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '590183922525',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'roman': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '339712958905',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'osrr': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '306033979130',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+    'bngo': {
+        'sso_start_url': 'https://ex-tsuchinoko.awsapps.com/start/',
+        'sso_account_id': '346325158211',
+        'sso_role_name': 'EXNOA_ReadOnlyAccess',
+        'region': 'ap-northeast-1'
+    },
+}
+
+
+def start_sso_login(profile_name: str) -> dict:
+    """SSO デバイス認証フローを開始"""
+    if profile_name not in SSO_PROFILES:
+        return {'error': f'Unknown profile: {profile_name}'}
+    
+    profile = SSO_PROFILES[profile_name]
+    region = profile['region']
+    
+    try:
+        oidc_client = boto3.client('sso-oidc', region_name=region)
+        
+        # 1. クライアント登録（認証不要）
+        register_response = oidc_client.register_client(
+            clientName='infra-cost-reduction-tool',
+            clientType='public'
+        )
+        
+        # 2. デバイス認証を開始
+        device_auth = oidc_client.start_device_authorization(
+            clientId=register_response['clientId'],
+            clientSecret=register_response['clientSecret'],
+            startUrl=profile['sso_start_url']
+        )
+        
+        return {
+            'success': True,
+            'profile': profile_name,
+            'clientId': register_response['clientId'],
+            'clientSecret': register_response['clientSecret'],
+            'deviceCode': device_auth['deviceCode'],
+            'userCode': device_auth['userCode'],
+            'verificationUri': device_auth['verificationUri'],
+            'verificationUriComplete': device_auth.get('verificationUriComplete', ''),
+            'expiresIn': device_auth['expiresIn'],
+            'interval': device_auth.get('interval', 5)
+        }
+    except Exception as e:
+        return {'error': str(e)}
+
+
+def complete_sso_login(profile_name: str, client_id: str, client_secret: str, device_code: str) -> dict:
+    """SSO 認証完了後、AWS 認証情報を取得"""
+    if profile_name not in SSO_PROFILES:
+        return {'error': f'Unknown profile: {profile_name}'}
+    
+    profile = SSO_PROFILES[profile_name]
+    region = profile['region']
+    
+    try:
+        oidc_client = boto3.client('sso-oidc', region_name=region)
+        sso_client = boto3.client('sso', region_name=region)
+        
+        # 3. アクセストークンを取得
+        token_response = oidc_client.create_token(
+            clientId=client_id,
+            clientSecret=client_secret,
+            grantType='urn:ietf:params:oauth:grant-type:device_code',
+            deviceCode=device_code
+        )
+        
+        access_token = token_response['accessToken']
+        
+        # 4. AWS 認証情報を取得
+        credentials_response = sso_client.get_role_credentials(
+            roleName=profile['sso_role_name'],
+            accountId=profile['sso_account_id'],
+            accessToken=access_token
+        )
+        
+        role_credentials = credentials_response['roleCredentials']
+        
+        return {
+            'success': True,
+            'profile': profile_name,
+            'accountId': profile['sso_account_id'],
+            'credentials': {
+                'accessKeyId': role_credentials['accessKeyId'],
+                'secretAccessKey': role_credentials['secretAccessKey'],
+                'sessionToken': role_credentials['sessionToken'],
+                'expiration': role_credentials['expiration']
+            }
+        }
+    except oidc_client.exceptions.AuthorizationPendingException:
+        return {'error': 'authorization_pending', 'message': 'ユーザーがまだ認証を完了していません'}
+    except oidc_client.exceptions.SlowDownException:
+        return {'error': 'slow_down', 'message': 'リクエストが多すぎます。しばらく待ってください'}
+    except oidc_client.exceptions.ExpiredTokenException:
+        return {'error': 'expired', 'message': '認証の有効期限が切れました。再度ログインしてください'}
+    except Exception as e:
+        return {'error': str(e)}
+
+
+def collect_resources_with_credentials(credentials: dict, region: str = 'ap-northeast-1') -> dict:
+    """ユーザーの認証情報を使ってリソースを収集"""
+    session = boto3.Session(
+        aws_access_key_id=credentials['accessKeyId'],
+        aws_secret_access_key=credentials['secretAccessKey'],
+        aws_session_token=credentials['sessionToken'],
+        region_name=region
+    )
+    
+    resources = {
+        'ec2': [],
+        'rds': [],
+        'docdb': [],
+        'redis': [],
+        'memcache': []
+    }
+    
+    # EC2
+    try:
+        ec2 = session.client('ec2')
+        response = ec2.describe_instances()
+        for reservation in response.get('Reservations', []):
+            for instance in reservation.get('Instances', []):
+                if instance.get('State', {}).get('Name') != 'running':
+                    continue
+                
+                name = ''
+                for tag in instance.get('Tags', []):
+                    if tag['Key'] == 'Name':
+                        name = tag['Value']
+                        break
+                
+                # EBS情報
+                ebs_type = ''
+                ebs_size = 0
+                for bdm in instance.get('BlockDeviceMappings', []):
+                    if 'Ebs' in bdm:
+                        vol_id = bdm['Ebs'].get('VolumeId')
+                        if vol_id:
+                            try:
+                                vol_resp = ec2.describe_volumes(VolumeIds=[vol_id])
+                                for vol in vol_resp.get('Volumes', []):
+                                    ebs_type = vol.get('VolumeType', '')
+                                    ebs_size = vol.get('Size', 0)
+                                    break
+                            except:
+                                pass
+                        break
+                
+                # CPU使用率（ユーザーセッションのCloudWatch）
+                cpu_avg_max, cpu_max, timestamp = get_max_cpu_with_session(
+                    session, instance['InstanceId'], 'AWS/EC2', 'InstanceId'
+                )
+                
+                resources['ec2'].append({
+                    'name': name,
+                    'instance_id': instance['InstanceId'],
+                    'instance_type': instance['InstanceType'],
+                    'count': 1,
+                    'ebs_type': ebs_type,
+                    'ebs_size_gb': ebs_size,
+                    'cpu_avg_max': round(cpu_avg_max, 2) if cpu_avg_max is not None else None,
+                    'cpu_max': round(cpu_max, 2) if cpu_max is not None else None,
+                    'timestamp': timestamp.isoformat() if timestamp else ''
+                })
+    except Exception as e:
+        print(f"EC2 collection error: {e}")
+    
+    # RDS
+    try:
+        rds = session.client('rds')
+        response = rds.describe_db_instances()
+        cluster_instances = defaultdict(list)
+        
+        for db in response.get('DBInstances', []):
+            # DocumentDBを除外（RDSセクションには含めない）
+            engine = db.get('Engine', '')
+            if 'docdb' in engine.lower():
+                print(f"Skipping DocumentDB instance in RDS: {db.get('DBInstanceIdentifier')}")
+                continue
+            
+            cluster_id = db.get('DBClusterIdentifier') or db.get('DBInstanceIdentifier')
+            cluster_instances[cluster_id].append(db)
+        
+        for cluster_id, instances in cluster_instances.items():
+            if instances:
+                inst = instances[0]
+                is_cluster = inst.get('DBClusterIdentifier') is not None
+                cpu_avg_max, cpu_max, timestamp = None, None, None
+                
+                # Auroraクラスターの場合
+                if is_cluster:
+                    # 1. CPUUtilization (DBClusterIdentifier)
+                    cpu_avg_max, cpu_max, timestamp = get_max_cpu_with_session(
+                        session, cluster_id, 'AWS/RDS', 'DBClusterIdentifier'
+                    )
+                    print(f"RDS Cluster {cluster_id} CPU (DBClusterIdentifier): {cpu_avg_max}")
+                    
+                    # 2. ACUUtilization (Aurora Serverless v2)
+                    if cpu_avg_max is None:
+                        cpu_avg_max, cpu_max, timestamp = get_serverless_acu_with_session(
+                            session, cluster_id
+                        )
+                    
+                    # 3. CPUUtilization (DBInstanceIdentifier)
+                    if cpu_avg_max is None:
+                        cpu_avg_max, cpu_max, timestamp = get_max_cpu_with_session(
+                            session, inst['DBInstanceIdentifier'], 'AWS/RDS', 'DBInstanceIdentifier'
+                        )
+                        print(f"RDS Cluster {cluster_id} CPU (DBInstanceIdentifier): {cpu_avg_max}")
+                else:
+                    cpu_avg_max, cpu_max, timestamp = get_max_cpu_with_session(
+                        session, inst['DBInstanceIdentifier'], 'AWS/RDS', 'DBInstanceIdentifier'
+                    )
+                    print(f"RDS Instance {cluster_id} CPU: {cpu_avg_max}")
+                
+                resources['rds'].append({
+                    'name': cluster_id,
+                    'instance_type': inst['DBInstanceClass'],
+                    'count': len(instances),
+                    'cpu_avg_max': round(cpu_avg_max, 2) if cpu_avg_max is not None else None,
+                    'cpu_max': round(cpu_max, 2) if cpu_max is not None else None,
+                    'timestamp': timestamp.isoformat() if timestamp else ''
+                })
+    except Exception as e:
+        print(f"RDS collection error: {e}")
+    
+    # DocumentDB
+    try:
+        docdb = session.client('docdb')
+        response = docdb.describe_db_clusters()
+        
+        for cluster in response.get('DBClusters', []):
+            members = cluster.get('DBClusterMembers', [])
+            if members:
+                member_id = members[0].get('DBInstanceIdentifier')
+                inst_resp = docdb.describe_db_instances(DBInstanceIdentifier=member_id)
+                inst = inst_resp['DBInstances'][0] if inst_resp.get('DBInstances') else {}
+                
+                cpu_avg_max, cpu_max, timestamp = get_max_cpu_with_session(
+                    session, member_id, 'AWS/DocDB', 'DBInstanceIdentifier'
+                )
+                resources['docdb'].append({
+                    'name': cluster['DBClusterIdentifier'],
+                    'instance_type': inst.get('DBInstanceClass', ''),
+                    'count': len(members),
+                    'cpu_avg_max': round(cpu_avg_max, 2) if cpu_avg_max is not None else None,
+                    'cpu_max': round(cpu_max, 2) if cpu_max is not None else None,
+                    'timestamp': timestamp.isoformat() if timestamp else ''
+                })
+    except Exception as e:
+        print(f"DocumentDB collection error: {e}")
+    
+    # ElastiCache (Redis)
+    try:
+        elasticache = session.client('elasticache')
+        response = elasticache.describe_replication_groups()
+        
+        for rg in response.get('ReplicationGroups', []):
+            node_groups = rg.get('NodeGroups', [])
+            if node_groups:
+                members = node_groups[0].get('NodeGroupMembers', [])
+                if members:
+                    cache_cluster_id = members[0].get('CacheClusterId')
+                    cc_resp = elasticache.describe_cache_clusters(CacheClusterId=cache_cluster_id)
+                    cc = cc_resp['CacheClusters'][0] if cc_resp.get('CacheClusters') else {}
+                    
+                    cpu_avg_max, cpu_max, timestamp = get_max_cpu_with_session(
+                        session, cache_cluster_id, 'AWS/ElastiCache', 'CacheClusterId'
+                    )
+                    total_nodes = sum(len(ng.get('NodeGroupMembers', [])) for ng in node_groups)
+                    
+                    resources['redis'].append({
+                        'name': rg['ReplicationGroupId'],
+                        'instance_type': cc.get('CacheNodeType', ''),
+                        'count': total_nodes,
+                        'cpu_avg_max': round(cpu_avg_max, 2) if cpu_avg_max is not None else None,
+                        'cpu_max': round(cpu_max, 2) if cpu_max is not None else None,
+                        'timestamp': timestamp.isoformat() if timestamp else ''
+                    })
+    except Exception as e:
+        print(f"Redis collection error: {e}")
+    
+    # ElastiCache (Memcached)
+    try:
+        elasticache = session.client('elasticache')
+        response = elasticache.describe_cache_clusters()
+        
+        for cc in response.get('CacheClusters', []):
+            if cc.get('Engine') == 'memcached':
+                cpu_avg_max, cpu_max, timestamp = get_max_cpu_with_session(
+                    session, cc['CacheClusterId'], 'AWS/ElastiCache', 'CacheClusterId'
+                )
+                resources['memcache'].append({
+                    'name': cc['CacheClusterId'],
+                    'instance_type': cc.get('CacheNodeType', ''),
+                    'count': cc.get('NumCacheNodes', 1),
+                    'cpu_avg_max': round(cpu_avg_max, 2) if cpu_avg_max is not None else None,
+                    'cpu_max': round(cpu_max, 2) if cpu_max is not None else None,
+                    'timestamp': timestamp.isoformat() if timestamp else ''
+                })
+    except Exception as e:
+        print(f"Memcached collection error: {e}")
+    
+    return resources
+
+
+def get_serverless_acu_with_session(session, cluster_id: str):
+    """Aurora Serverless v2のACU使用率を取得"""
+    cloudwatch = session.client('cloudwatch')
+    
+    period = 300
+    days = 30
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(days=days)
+    
+    max_avg = None
+    max_max = None
+    max_timestamp = None
+    
+    print(f"[CloudWatch] Getting Serverless ACU: cluster={cluster_id}")
+    
+    interval = timedelta(days=5)
+    current_start = start_time
+    total_datapoints = 0
+    
+    while current_start < end_time:
+        current_end = min(current_start + interval, end_time)
+        
+        try:
+            response = cloudwatch.get_metric_statistics(
+                Namespace='AWS/RDS',
+                MetricName='ACUUtilization',
+                Dimensions=[{'Name': 'DBClusterIdentifier', 'Value': cluster_id}],
+                StartTime=current_start,
+                EndTime=current_end,
+                Period=period,
+                Statistics=['Average', 'Maximum'],
+                Unit='Percent'
+            )
+            
+            datapoints = response.get('Datapoints', [])
+            total_datapoints += len(datapoints)
+            
+            for dp in datapoints:
+                avg = dp.get('Average', 0)
+                maximum = dp.get('Maximum', 0)
+                if max_avg is None or avg > max_avg:
+                    max_avg = avg
+                    max_max = maximum
+                    max_timestamp = dp['Timestamp']
+        except Exception as e:
+            print(f"[CloudWatch] Serverless ACU error for {cluster_id}: {e}")
+        
+        current_start = current_end
+    
+    print(f"[CloudWatch] Serverless ACU result for {cluster_id}: datapoints={total_datapoints}, max_avg={max_avg}")
+    return max_avg, max_max, max_timestamp
+
+
+def get_max_cpu_with_session(session, instance_id: str, namespace: str, dimension_name: str):
+    """セッションを使用してCPU使用率を取得"""
+    cloudwatch = session.client('cloudwatch')
+    
+    period = 300
+    days = 30
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(days=days)
+    
+    max_avg = None  # データがない場合はNone
+    max_max = None
+    max_timestamp = None
+    
+    print(f"[CloudWatch] Getting metrics: namespace={namespace}, dimension={dimension_name}, value={instance_id}")
+    
+    interval = timedelta(days=5)
+    current_start = start_time
+    total_datapoints = 0
+    
+    while current_start < end_time:
+        current_end = min(current_start + interval, end_time)
+        
+        try:
+            response = cloudwatch.get_metric_statistics(
+                Namespace=namespace,
+                MetricName='CPUUtilization',
+                Dimensions=[{'Name': dimension_name, 'Value': instance_id}],
+                StartTime=current_start,
+                EndTime=current_end,
+                Period=period,
+                Statistics=['Average', 'Maximum'],
+                Unit='Percent'
+            )
+            
+            datapoints = response.get('Datapoints', [])
+            total_datapoints += len(datapoints)
+            
+            for dp in datapoints:
+                avg = dp.get('Average', 0)
+                maximum = dp.get('Maximum', 0)
+                if max_avg is None or avg > max_avg:
+                    max_avg = avg
+                    max_max = maximum
+                    max_timestamp = dp['Timestamp']
+        except Exception as e:
+            print(f"[CloudWatch] Error for {instance_id}: {e}")
+        
+        current_start = current_end
+    
+    print(f"[CloudWatch] Result for {instance_id}: datapoints={total_datapoints}, max_avg={max_avg}")
+    return max_avg, max_max, max_timestamp
 
 
 # MCP サーバー設定
@@ -62,6 +587,8 @@ def get_instance_price_from_mcp(instance_type: str, service: str = "ec2", region
     return result.get('hourly_price_usd') or result.get('hourly_price', 0.0)
 
 # CloudWatchから最大CPU使用率を取得（30日間、5分平均）
+# cpu_avg_max: 5分間平均値の最大（判定用）
+# cpu_max: 5分間最大値の最大（参考）
 def get_max_cpu_utilization(instance_id, namespace='AWS/EC2', dimension_name='InstanceId'):
     cloudwatch = boto3.client('cloudwatch')
 
@@ -70,8 +597,10 @@ def get_max_cpu_utilization(instance_id, namespace='AWS/EC2', dimension_name='In
 
     end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(days=days)
-    max_cpu = 0.0
-    max_cpu_timestamp = None
+    
+    cpu_avg_max = 0.0  # 平均値の最大
+    cpu_max = 0.0      # 最大値の最大
+    max_timestamp = None
     
     interval = timedelta(days=5)
     current_start = start_time
@@ -79,27 +608,37 @@ def get_max_cpu_utilization(instance_id, namespace='AWS/EC2', dimension_name='In
     while current_start < end_time:
         current_end = min(current_start + interval, end_time)
 
-        response = cloudwatch.get_metric_statistics(
-            Namespace=namespace,
-            MetricName='CPUUtilization',
-            Dimensions=[{'Name': dimension_name, 'Value': instance_id}],
-            StartTime=current_start,
-            EndTime=current_end,
-            Period=period,
-            Statistics=['Average'],
-            Unit='Percent'
-        )
+        try:
+            response = cloudwatch.get_metric_statistics(
+                Namespace=namespace,
+                MetricName='CPUUtilization',
+                Dimensions=[{'Name': dimension_name, 'Value': instance_id}],
+                StartTime=current_start,
+                EndTime=current_end,
+                Period=period,
+                Statistics=['Average', 'Maximum'],  # 両方取得
+                Unit='Percent'
+            )
 
-        datapoints = response.get('Datapoints', [])
-
-        for dp in datapoints:
-            if dp['Average'] > max_cpu:
-                max_cpu = dp['Average']
-                max_cpu_timestamp = dp['Timestamp']
+            for dp in response.get('Datapoints', []):
+                avg = dp.get('Average', 0)
+                maximum = dp.get('Maximum', 0)
+                if avg > cpu_avg_max:
+                    cpu_avg_max = avg
+                    cpu_max = maximum
+                    max_timestamp = dp['Timestamp']
+        except Exception as e:
+            print(f"CloudWatch error for {instance_id}: {e}")
 
         current_start = current_end
     
-    return (round(max_cpu, 2), max_cpu_timestamp) if max_cpu > 0 else (None, None)
+    if cpu_avg_max > 0:
+        return {
+            'cpu_avg_max': round(cpu_avg_max, 2),
+            'cpu_max': round(cpu_max, 2),
+            'timestamp': max_timestamp
+        }
+    return {'cpu_avg_max': None, 'cpu_max': None, 'timestamp': None}
 
 
 def get_ec2_instances():
@@ -150,20 +689,35 @@ def get_ec2_instances():
 
         instance_id_display = instance_ids[0] if count == 1 else None
 
-        max_cpu = 0.0
-        max_cpu_timestamp = None
+        cpu_metrics = {'cpu_avg_max': None, 'cpu_max': None, 'timestamp': None}
 
         if auto_scaling_group_name:
-            max_cpu, max_cpu_timestamp = get_max_cpu_utilization(auto_scaling_group_name, namespace='AWS/EC2', dimension_name='AutoScalingGroupName')
+            # Auto Scaling Group のメトリクスを使用（ASG全体のCPU）
+            cpu_metrics = get_max_cpu_utilization(
+                auto_scaling_group_name, 
+                namespace='AWS/EC2', 
+                dimension_name='AutoScalingGroupName'
+            )
+            print(f"ASG metrics for {instance_name} ({auto_scaling_group_name}): {cpu_metrics}")
         elif instance_ids:
-            cpu_usages = [get_max_cpu_utilization(iid) for iid in instance_ids]
-            for cpu, ts in cpu_usages:
-                if cpu is not None and cpu > max_cpu:
-                    max_cpu = cpu
-                    max_cpu_timestamp = ts
-        else:
-            max_cpu = None
-            max_cpu_timestamp = None
+            # 個別インスタンスのメトリクスを集約
+            best_avg_max = 0.0
+            best_cpu_max = 0.0
+            best_timestamp = None
+            
+            for iid in instance_ids:
+                metrics = get_max_cpu_utilization(iid)
+                if metrics['cpu_avg_max'] is not None and metrics['cpu_avg_max'] > best_avg_max:
+                    best_avg_max = metrics['cpu_avg_max']
+                    best_cpu_max = metrics['cpu_max']
+                    best_timestamp = metrics['timestamp']
+            
+            if best_avg_max > 0:
+                cpu_metrics = {
+                    'cpu_avg_max': best_avg_max,
+                    'cpu_max': best_cpu_max,
+                    'timestamp': best_timestamp
+                }
 
         if ebs_info:
             for ebs in ebs_info:
@@ -174,8 +728,11 @@ def get_ec2_instances():
                     "count": count,
                     "ebs_type": ebs[0],
                     "ebs_size": ebs[1],
-                    "max_cpu": max_cpu,
-                    "max_cpu_time": max_cpu_timestamp.isoformat() if max_cpu_timestamp else None
+                    "cpu_avg_max": cpu_metrics['cpu_avg_max'],
+                    "cpu_max": cpu_metrics['cpu_max'],
+                    "timestamp": cpu_metrics['timestamp'].isoformat() if cpu_metrics['timestamp'] else None,
+                    "is_auto_scaling": bool(auto_scaling_group_name),
+                    "auto_scaling_group": auto_scaling_group_name
                 })
 
     return instances_info
@@ -351,42 +908,218 @@ def format_resources_for_bedrock(resources, pricing_info=None):
         hourly = prices.get(instance_type, 0)
         return round(hourly * 730, 2) if hourly else None
     
+    # リストまたは辞書からデータを取得するヘルパー
+    def get_field(item, field, list_index=None):
+        if isinstance(item, dict):
+            # 辞書の場合
+            if field == 'cpu':
+                return item.get('cpu_avg_max') or item.get('max_cpu') or 0
+            return item.get(field, '')
+        elif isinstance(item, (list, tuple)):
+            # リストの場合
+            if list_index is not None and list_index < len(item):
+                return item[list_index] or ''
+            return ''
+        return ''
+    
     output.append("EC2 :")
     output.append("Instance Name\tInstance Type\t台数\tCPU AvgMax\t月額(USD)")
-    for item in resources["ec2"]:
-        monthly = get_monthly_cost(item['instance_type'], 'ec2')
+    for item in resources.get("ec2", []):
+        # EC2: [name, id, type, count, ebs_type, ebs_size, cpu, ts] or dict
+        if isinstance(item, dict):
+            name, itype, count, cpu = item.get('name', ''), item.get('instance_type', ''), item.get('count', 1), get_field(item, 'cpu')
+        else:
+            name, itype, count, cpu = item[0], item[2], item[3], item[6] or 0
+        monthly = get_monthly_cost(itype, 'ec2')
         monthly_str = f"${monthly}" if monthly else "N/A"
-        output.append(f"{item['name']}\t{item['instance_type']}\t{item['count']}\t{item['max_cpu']}\t{monthly_str}")
+        output.append(f"{name}\t{itype}\t{count}\t{cpu}\t{monthly_str}")
 
     output.append("\nRDS :")
     output.append("Cluster Name\tInstance Type\t台数\tCPU AvgMax\t月額(USD)")
-    for item in resources["rds"]:
-        monthly = get_monthly_cost(item['instance_type'], 'rds')
+    for item in resources.get("rds", []):
+        # RDS: [name, type, count, cpu, ts] or dict
+        if isinstance(item, dict):
+            name, itype, count, cpu = item.get('name', ''), item.get('instance_type', ''), item.get('count', 1), get_field(item, 'cpu')
+        else:
+            name, itype, count, cpu = item[0], item[1], item[2], item[3] or 0
+        monthly = get_monthly_cost(itype, 'rds')
         monthly_str = f"${monthly}" if monthly else "N/A"
-        output.append(f"{item['name']}\t{item['instance_type']}\t{item['count']}\t{item['max_cpu']}\t{monthly_str}")
+        output.append(f"{name}\t{itype}\t{count}\t{cpu}\t{monthly_str}")
 
     output.append("\nDocumentDB :")
     output.append("Cluster Name\tInstance Type\t台数\tCPU AvgMax\t月額(USD)")
-    for item in resources["docdb"]:
-        monthly = get_monthly_cost(item['instance_type'], 'docdb')
+    for item in resources.get("docdb", []):
+        # DocDB: [name, type, count, cpu, ts] or dict
+        if isinstance(item, dict):
+            name, itype, count, cpu = item.get('name', ''), item.get('instance_type', ''), item.get('count', 1), get_field(item, 'cpu')
+        else:
+            name, itype, count, cpu = item[0], item[1], item[2], item[3] or 0
+        monthly = get_monthly_cost(itype, 'docdb')
         monthly_str = f"${monthly}" if monthly else "N/A"
-        output.append(f"{item['name']}\t{item['instance_type']}\t{item['count']}\t{item['max_cpu']}\t{monthly_str}")
+        output.append(f"{name}\t{itype}\t{count}\t{cpu}\t{monthly_str}")
 
     output.append("\nRedis (ElastiCache) :")
     output.append("Cluster Name\tInstance Type\t台数\tCPU AvgMax\t月額(USD)")
-    for item in resources["redis"]:
-        monthly = get_monthly_cost(item['instance_type'], 'redis')
+    for item in resources.get("redis", []):
+        # Redis: [name, type, count, cpu, ts] or dict
+        if isinstance(item, dict):
+            name, itype, count, cpu = item.get('name', ''), item.get('instance_type', ''), item.get('count', 1), get_field(item, 'cpu')
+        else:
+            name, itype, count, cpu = item[0], item[1], item[2], item[3] or 0
+        monthly = get_monthly_cost(itype, 'redis')
         monthly_str = f"${monthly}" if monthly else "N/A"
-        output.append(f"{item['name']}\t{item['instance_type']}\t{item['count']}\t{item['max_cpu']}\t{monthly_str}")
+        output.append(f"{name}\t{itype}\t{count}\t{cpu}\t{monthly_str}")
 
     output.append("\nMemcached (ElastiCache) :")
     output.append("Cluster Name\tInstance Type\t台数\tCPU AvgMax\t月額(USD)")
-    for item in resources["memcache"]:
-        monthly = get_monthly_cost(item['instance_type'], 'memcache')
+    for item in resources.get("memcache", []):
+        # Memcache: [name, type, count, cpu, ts] or dict
+        if isinstance(item, dict):
+            name, itype, count, cpu = item.get('name', ''), item.get('instance_type', ''), item.get('count', 1), get_field(item, 'cpu')
+        else:
+            name, itype, count, cpu = item[0], item[1], item[2], item[3] or 0
+        monthly = get_monthly_cost(itype, 'memcache')
         monthly_str = f"${monthly}" if monthly else "N/A"
-        output.append(f"{item['name']}\t{item['instance_type']}\t{item['count']}\t{item['max_cpu']}\t{monthly_str}")
+        output.append(f"{name}\t{itype}\t{count}\t{cpu}\t{monthly_str}")
 
     return "\n".join(output)
+
+
+def get_mcp_batch_recommendations(resources):
+    """MCPから全リソースの一括スケールダウン提案を取得"""
+    instances = []
+    
+    # リストまたは辞書からフィールドを取得するヘルパー
+    def get_field(item, dict_key, list_index, is_ec2=False):
+        if isinstance(item, dict):
+            return item.get(dict_key)
+        elif isinstance(item, (list, tuple)):
+            # EC2はリストのインデックスが異なる
+            actual_index = list_index + (1 if is_ec2 and list_index >= 2 else 0)
+            return item[actual_index] if len(item) > actual_index else None
+        return None
+    
+    def get_instance_type(item, is_ec2=False):
+        if isinstance(item, dict):
+            return item.get("instance_type")
+        elif isinstance(item, (list, tuple)):
+            idx = 2 if is_ec2 else 1
+            return item[idx] if len(item) > idx else None
+        return None
+    
+    def get_cpu_avg_max(item):
+        if isinstance(item, dict):
+            return item.get("cpu_avg_max") or item.get("max_cpu")
+        return None
+    
+    # EC2
+    for item in resources.get("ec2", []):
+        if isinstance(item, dict):
+            name = item.get("name", "")
+            instance_type = item.get("instance_type", "")
+            cpu = item.get("cpu_avg_max") or item.get("max_cpu")
+            if name and instance_type and cpu is not None:
+                instances.append({
+                    "name": name,
+                    "instance_type": instance_type,
+                    "cpu_avg_max": cpu,
+                    "service": "ec2"
+                })
+    
+    # RDS
+    for item in resources.get("rds", []):
+        if isinstance(item, dict):
+            name = item.get("name", "")
+            instance_type = item.get("instance_type", "")
+            cpu = item.get("cpu_avg_max") or item.get("max_cpu")
+            if name and instance_type and cpu is not None:
+                instances.append({
+                    "name": name,
+                    "instance_type": instance_type,
+                    "cpu_avg_max": cpu,
+                    "service": "rds"
+                })
+    
+    # DocumentDB
+    for item in resources.get("docdb", []):
+        if isinstance(item, dict):
+            name = item.get("name", "")
+            instance_type = item.get("instance_type", "")
+            cpu = item.get("cpu_avg_max") or item.get("max_cpu")
+            if name and instance_type and cpu is not None:
+                instances.append({
+                    "name": name,
+                    "instance_type": instance_type,
+                    "cpu_avg_max": cpu,
+                    "service": "docdb"
+                })
+    
+    # Redis / Memcache
+    for service_key in ["redis", "memcache"]:
+        for item in resources.get(service_key, []):
+            if isinstance(item, dict):
+                name = item.get("name", "")
+                instance_type = item.get("instance_type", "")
+                cpu = item.get("cpu_avg_max") or item.get("max_cpu")
+                if name and instance_type and cpu is not None:
+                    instances.append({
+                        "name": name,
+                        "instance_type": instance_type,
+                        "cpu_avg_max": cpu,
+                        "service": "elasticache"
+                    })
+    
+    if not instances:
+        return {}
+    
+    # MCP呼び出し
+    try:
+        mcp_endpoint = os.environ.get("MCP_ENDPOINT", "")
+        if not mcp_endpoint:
+            print("MCP_ENDPOINT not configured")
+            return {}
+        
+        request_body = {
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": {
+                "name": "get_batch_recommendations",
+                "arguments": {
+                    "instances": instances,
+                    "region": "ap-northeast-1"
+                }
+            },
+            "id": 1
+        }
+        
+        req = urllib.request.Request(
+            mcp_endpoint,
+            data=json.dumps(request_body).encode('utf-8'),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        
+        with urllib.request.urlopen(req, timeout=30) as res:
+            response = json.loads(res.read().decode('utf-8'))
+            result = response.get("result", {})
+            content = result.get("content", [])
+            if content and content[0].get("type") == "text":
+                data = json.loads(content[0].get("text", "{}"))
+                recommendations = data.get("recommendations", [])
+                
+                # 名前をキーにした辞書に変換
+                rec_dict = {}
+                for rec in recommendations:
+                    name = rec.get("name", "")
+                    if name:
+                        rec_dict[name] = rec
+                
+                print(f"MCP batch recommendations: {len(rec_dict)} items")
+                return rec_dict
+    except Exception as e:
+        print(f"Error getting MCP batch recommendations: {e}")
+    
+    return {}
 
 
 def collect_pricing_info(resources):
@@ -398,18 +1131,29 @@ def collect_pricing_info(resources):
         'docdb': {}
     }
     
+    # リストまたは辞書からinstance_typeを取得
+    def get_instance_type(item, is_ec2=False):
+        if isinstance(item, dict):
+            return item.get("instance_type")
+        elif isinstance(item, (list, tuple)):
+            # EC2: [name, id, type, count, ...] -> index 2
+            # Others: [name, type, count, ...] -> index 1
+            idx = 2 if is_ec2 else 1
+            return item[idx] if len(item) > idx else None
+        return None
+    
     # サービスとリソースキーのマッピング
     service_mapping = [
-        ('ec2', 'ec2', resources.get("ec2", [])),
-        ('rds', 'rds', resources.get("rds", [])),
-        ('docdb', 'docdb', resources.get("docdb", [])),
-        ('elasticache', 'redis', resources.get("redis", [])),
-        ('elasticache', 'memcache', resources.get("memcache", [])),
+        ('ec2', 'ec2', resources.get("ec2", []), True),
+        ('rds', 'rds', resources.get("rds", []), False),
+        ('docdb', 'docdb', resources.get("docdb", []), False),
+        ('elasticache', 'redis', resources.get("redis", []), False),
+        ('elasticache', 'memcache', resources.get("memcache", []), False),
     ]
     
-    for service_key, resource_key, items in service_mapping:
+    for service_key, resource_key, items, is_ec2 in service_mapping:
         for item in items:
-            instance_type = item.get("instance_type")
+            instance_type = get_instance_type(item, is_ec2)
             if instance_type and instance_type not in pricing_info[service_key]:
                 price = get_instance_price_from_mcp(instance_type, service_key)
                 if price > 0:
@@ -439,18 +1183,21 @@ def get_bedrock_analysis(resource_text):
 
 | CPU AvgMax | 判定 | 提案 |
 |------------|------|------|
-| 30%未満 | 過剰 | 小さいタイプへ変更（コスト削減） |
-| 30%〜70% | 適正 | 変更不要 |
+| 50%未満 | 過剰 | 小さいタイプへ変更（コスト削減） |
+| 50%〜70% | 適正 | 変更不要 |
 | 70%以上 | 不足 | 変更不要（コメントのみ） |
 
-★★★ 重要 ★★★
+★★★ 重要：目標CPU使用率 50〜70% ★★★
 - これはコスト削減ツールです
 - スケールダウン（小さいタイプへの変更）のみ提案してください
+- 変更後の予測CPU使用率が50〜70%になるタイプを選んでください
+- 予測CPU = 現在CPU × (現在vCPU数 / 提案vCPU数)
 - スペック不足の場合は「変更不要」とし、コメントで「スペック不足」と記載するだけでOK
 
 例：
-- CPU AvgMax = 10% → 過剰 → t3.medium → t3.small へ変更提案
-- CPU AvgMax = 35% → 適正 → 変更不要
+- CPU AvgMax = 10% (t3.medium/2vCPU) → 過剰 → t3.micro (1vCPU) へ変更で予測20%...まだ低い → t3.nano (0.5vCPU相当) で予測40%程度
+- CPU AvgMax = 25% (t3.large/2vCPU) → 過剰 → t3.medium (2vCPU) で予測50%程度 → 採用
+- CPU AvgMax = 55% → 適正 → 変更不要
 - CPU AvgMax = 80% → 不足 → 変更不要（コメント：スペック不足）
 
 【出力形式】
@@ -580,539 +1327,6 @@ def get_bedrock_analysis(resource_text):
         "token_usage": token_info
     }
 
-
-def get_cloudshell_script():
-    """CloudShell用のスクリプトを返す"""
-    return '''#!/usr/bin/env python3
-"""
-AWS インフラコスト削減アナライザー - CloudShell 用スクリプト
-AWS CloudShell で実行して、結果をコピー&ペーストしてください。
-"""
-
-import boto3
-from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-import sys
-
-def get_max_cpu_utilization(instance_id, namespace='AWS/EC2', dimension_name='InstanceId'):
-    cloudwatch = boto3.client('cloudwatch')
-    period = 300
-    days = 30
-    end_time = datetime.now(timezone.utc)
-    start_time = end_time - timedelta(days=days)
-    max_cpu = 0.0
-    max_cpu_timestamp = None
-    interval = timedelta(days=5)
-    current_start = start_time
-
-    while current_start < end_time:
-        current_end = min(current_start + interval, end_time)
-        try:
-            response = cloudwatch.get_metric_statistics(
-                Namespace=namespace,
-                MetricName='CPUUtilization',
-                Dimensions=[{'Name': dimension_name, 'Value': instance_id}],
-                StartTime=current_start,
-                EndTime=current_end,
-                Period=period,
-                Statistics=['Average'],
-                Unit='Percent'
-            )
-            for dp in response.get('Datapoints', []):
-                if dp['Average'] > max_cpu:
-                    max_cpu = dp['Average']
-                    max_cpu_timestamp = dp['Timestamp']
-        except Exception:
-            pass
-        current_start = current_end
-    
-    return (round(max_cpu, 2), max_cpu_timestamp) if max_cpu > 0 else (None, None)
-
-
-def get_ec2_instances():
-    ec2 = boto3.client("ec2")
-    response = ec2.describe_instances()
-    instances_info = []
-    instance_data = defaultdict(lambda: {"count": 0, "ebs_info": set(), "instance_ids": [], "auto_scaling_group": None})
-
-    for reservation in response["Reservations"]:
-        for instance in reservation["Instances"]:
-            if instance["State"]["Name"] in ["terminated", "stopped"]:
-                continue
-            
-            instance_id = instance["InstanceId"]
-            instance_type = instance["InstanceType"]
-            
-            instance_name = "N/A"
-            for tag in instance.get("Tags", []):
-                if tag["Key"] == "Name":
-                    instance_name = tag["Value"]
-                    break
-            
-            auto_scaling_group_name = None
-            for tag in instance.get("Tags", []):
-                if tag["Key"] == "aws:autoscaling:groupName":
-                    auto_scaling_group_name = tag["Value"]
-                    break
-            
-            key = (instance_name, instance_type)
-            instance_data[key]["count"] += 1
-            instance_data[key]["instance_ids"].append(instance_id)
-            instance_data[key]["auto_scaling_group"] = auto_scaling_group_name
-            
-            for block_device in instance.get("BlockDeviceMappings", []):
-                volume_id = block_device.get("Ebs", {}).get("VolumeId", "N/A")
-                if volume_id != "N/A":
-                    try:
-                        volume = ec2.describe_volumes(VolumeIds=[volume_id])["Volumes"][0]
-                        ebs_type = volume["VolumeType"]
-                        storage_size = volume["Size"]
-                        instance_data[key]["ebs_info"].add((ebs_type, storage_size))
-                    except Exception:
-                        pass
-    
-    for (instance_name, instance_type), data in instance_data.items():
-        count = data["count"]
-        ebs_info = data["ebs_info"]
-        instance_ids = data["instance_ids"]
-        auto_scaling_group_name = data["auto_scaling_group"]
-        instance_id_display = instance_ids[0] if count == 1 else None
-
-        max_cpu = 0.0
-        max_cpu_timestamp = None
-
-        if auto_scaling_group_name:
-            max_cpu, max_cpu_timestamp = get_max_cpu_utilization(auto_scaling_group_name, namespace='AWS/EC2', dimension_name='AutoScalingGroupName')
-        elif instance_ids:
-            for iid in instance_ids:
-                cpu, ts = get_max_cpu_utilization(iid)
-                if cpu is not None and cpu > max_cpu:
-                    max_cpu = cpu
-                    max_cpu_timestamp = ts
-
-        if ebs_info:
-            for ebs in ebs_info:
-                instances_info.append([
-                    instance_name, instance_id_display, instance_type, count,
-                    ebs[0], ebs[1], max_cpu,
-                    max_cpu_timestamp.isoformat() if max_cpu_timestamp else "N/A"
-                ])
-
-    return instances_info
-
-
-def get_rds_clusters():
-    rds = boto3.client("rds")
-    clusters_info = []
-    cluster_instance_ids = set()
-
-    try:
-        response = rds.describe_db_clusters()
-        for cluster in response["DBClusters"]:
-            if cluster["Engine"] == "docdb":
-                continue
-            cluster_name = cluster["DBClusterIdentifier"]
-            node_count = len(cluster["DBClusterMembers"])
-
-            instance_types = set()
-            for member in cluster["DBClusterMembers"]:
-                db_instance_identifier = member["DBInstanceIdentifier"]
-                cluster_instance_ids.add(db_instance_identifier)
-                db_instance = rds.describe_db_instances(DBInstanceIdentifier=db_instance_identifier)["DBInstances"][0]
-                instance_type = db_instance["DBInstanceClass"]
-                instance_types.add(instance_type)
-
-            instance_type_display = ", ".join(sorted(instance_types)) if len(instance_types) > 1 else next(iter(instance_types))
-            cpu, ts = get_max_cpu_utilization(cluster_name, namespace='AWS/RDS', dimension_name='DBClusterIdentifier')
-            clusters_info.append([cluster_name, instance_type_display, node_count, cpu, ts.isoformat() if ts else None])
-    except Exception:
-        pass
-
-    try:
-        response = rds.describe_db_instances()
-        for instance in response["DBInstances"]:
-            instance_id = instance["DBInstanceIdentifier"]
-            if instance_id in cluster_instance_ids or instance["Engine"] == "docdb":
-                continue
-            instance_type = instance["DBInstanceClass"]
-            cpu, ts = get_max_cpu_utilization(instance_id, namespace='AWS/RDS', dimension_name='DBInstanceIdentifier')
-            clusters_info.append([instance_id, instance_type, 1, cpu, ts.isoformat() if ts else None])
-    except Exception:
-        pass
-
-    return clusters_info
-
-
-def get_docdb_clusters():
-    docdb = boto3.client("docdb")
-    clusters_info = []
-    
-    try:
-        response = docdb.describe_db_clusters()
-        for cluster in response["DBClusters"]:
-            if cluster["Engine"] != "docdb":
-                continue
-            cluster_name = cluster["DBClusterIdentifier"]
-            
-            instance_types = set()
-            for member in cluster["DBClusterMembers"]:
-                db_instance_identifier = member["DBInstanceIdentifier"]
-                db_instance = docdb.describe_db_instances(DBInstanceIdentifier=db_instance_identifier)["DBInstances"][0]
-                instance_type = db_instance["DBInstanceClass"]
-                instance_types.add(instance_type)
-            
-            instance_type_display = ", ".join(sorted(instance_types)) if len(instance_types) > 1 else next(iter(instance_types))
-            node_count = len(cluster["DBClusterMembers"])
-            cpu, ts = get_max_cpu_utilization(cluster_name, namespace='AWS/DocDB', dimension_name='DBClusterIdentifier')
-            clusters_info.append([cluster_name, instance_type_display, node_count, cpu, ts.isoformat() if ts else None])
-    except Exception:
-        pass
-    
-    return clusters_info
-
-
-def get_redis_clusters():
-    elasticache = boto3.client("elasticache")
-    clusters_info = []
-
-    try:
-        response = elasticache.describe_replication_groups()
-        for cluster in response["ReplicationGroups"]:
-            cluster_name = cluster["ReplicationGroupId"]
-            instance_type = cluster["CacheNodeType"]
-            node_count = len(cluster["MemberClusters"])
-            cpu, ts = None, None
-            for node_id in cluster["MemberClusters"]:
-                cpu, ts = get_max_cpu_utilization(node_id, namespace='AWS/ElastiCache', dimension_name='CacheClusterId')
-            clusters_info.append([cluster_name, instance_type, node_count, cpu, ts.isoformat() if ts else None])
-    except Exception:
-        pass
-
-    return clusters_info
-
-
-def get_memcache_clusters():
-    elasticache = boto3.client("elasticache")
-    clusters_info = []
-
-    try:
-        response = elasticache.describe_cache_clusters()
-        for cluster in response["CacheClusters"]:
-            if cluster["Engine"] != "memcached":
-                continue
-            cluster_name = cluster["CacheClusterId"]
-            instance_type = cluster["CacheNodeType"]
-            node_count = cluster["NumCacheNodes"]
-            cpu, ts = get_max_cpu_utilization(cluster_name, namespace='AWS/ElastiCache', dimension_name='CacheClusterId')
-            clusters_info.append([cluster_name, instance_type, node_count, cpu, ts.isoformat() if ts else None])
-    except Exception:
-        pass
-
-    return clusters_info
-
-
-def main():
-    print("=" * 60, file=sys.stderr)
-    print("AWS インフラコスト削減アナライザー", file=sys.stderr)
-    print("=" * 60, file=sys.stderr)
-    print("データを収集中...", file=sys.stderr)
-    
-    ec2_instances = get_ec2_instances()
-    print(f"  EC2: {len(ec2_instances)} 件", file=sys.stderr)
-    
-    rds_clusters = get_rds_clusters()
-    print(f"  RDS: {len(rds_clusters)} 件", file=sys.stderr)
-    
-    docdb_clusters = get_docdb_clusters()
-    print(f"  DocumentDB: {len(docdb_clusters)} 件", file=sys.stderr)
-    
-    redis_clusters = get_redis_clusters()
-    print(f"  Redis: {len(redis_clusters)} 件", file=sys.stderr)
-    
-    memcache_clusters = get_memcache_clusters()
-    print(f"  Memcached: {len(memcache_clusters)} 件", file=sys.stderr)
-    
-    print("", file=sys.stderr)
-    print("=" * 60, file=sys.stderr)
-    print("以下の結果をコピーしてブラウザに貼り付けてください", file=sys.stderr)
-    print("=" * 60, file=sys.stderr)
-    print("", file=sys.stderr)
-
-    print("\\nEC2 :")
-    print("Instance Name\\tInstance ID\\tInstance Type\\t台数\\tEBS Type\\tEBS Size\\tMax CPU\\tMax CPU Time")
-    for instance in ec2_instances:
-        print("\\t".join(map(str, instance)))
-
-    print("\\nRedis :")
-    print("Cluster Name\\tInstance Type\\t台数\\tMax CPU\\tMax CPU Time")
-    for cluster in redis_clusters:
-        print("\\t".join(map(str, cluster)))
-
-    print("\\nMemcached :")
-    print("Cluster Name\\tInstance Type\\t台数\\tMax CPU\\tMax CPU Time")
-    for cluster in memcache_clusters:
-        print("\\t".join(map(str, cluster)))
-
-    print("\\nRDS :")
-    print("Cluster Name\\tInstance Type\\t台数\\tMax CPU\\tMax CPU Time")
-    for cluster in rds_clusters:
-        print("\\t".join(map(str, cluster)))
-
-    print("\\nDocumentDB :")
-    print("Cluster Name\\tInstance Type\\t台数\\tMax CPU\\tMax CPU Time")
-    for cluster in docdb_clusters:
-        print("\\t".join(map(str, cluster)))
-
-
-if __name__ == "__main__":
-    main()
-'''
-
-
-def get_local_check_script():
-    """ローカル実行用のスクリプトを返す（AWS CLIプロファイル対応 + 自動アップロード）"""
-    # 動的にURLを埋め込む
-    return '''#!/usr/bin/env python3
-"""
-AWS インフラコスト削減アナライザー - ローカル実行用スクリプト
-
-使用方法:
-  # 自動アップロード + AI分析（推奨）
-  python check.py --profile account-a --upload --analyze
-  
-  # 複数アカウント一括処理
-  for p in account-a account-b account-c; do
-    python check.py --profile $p --upload --analyze
-  done
-  
-  # ファイルに保存
-  python check.py --profile account-a --output result.txt
-"""
-import boto3
-import argparse
-import sys
-import io
-import json
-from urllib.request import urlopen, Request
-from urllib.error import URLError, HTTPError
-from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-
-DEFAULT_URL = "https://oprto2mpbwtacfhzaql7phb5ay0rxifk.lambda-url.ap-northeast-1.on.aws/"
-_session = None
-
-def get_session():
-    global _session
-    if _session is None:
-        _session = boto3.Session()
-    return _session
-
-def get_client(service_name):
-    return get_session().client(service_name)
-
-def get_max_cpu_utilization(instance_id, namespace='AWS/EC2', dimension_name='InstanceId'):
-    cloudwatch = get_client('cloudwatch')
-    period, days = 300, 30
-    end_time = datetime.now(timezone.utc)
-    start_time = end_time - timedelta(days=days)
-    max_cpu, max_cpu_timestamp = 0.0, None
-    interval = timedelta(days=5)
-    current_start = start_time
-    while current_start < end_time:
-        current_end = min(current_start + interval, end_time)
-        response = cloudwatch.get_metric_statistics(
-            Namespace=namespace, MetricName='CPUUtilization',
-            Dimensions=[{'Name': dimension_name, 'Value': instance_id}],
-            StartTime=current_start, EndTime=current_end,
-            Period=period, Statistics=['Average'], Unit='Percent'
-        )
-        for dp in response.get('Datapoints', []):
-            if dp['Average'] > max_cpu:
-                max_cpu, max_cpu_timestamp = dp['Average'], dp['Timestamp']
-        current_start = current_end
-    return (round(max_cpu, 2), max_cpu_timestamp) if max_cpu > 0 else (None, None)
-
-def get_ec2_instances():
-    ec2 = get_client("ec2")
-    response = ec2.describe_instances()
-    instances_info = []
-    instance_data = defaultdict(lambda: {"count": 0, "ebs_info": set(), "instance_ids": [], "asg": None})
-    for reservation in response["Reservations"]:
-        for inst in reservation["Instances"]:
-            if inst["State"]["Name"] in ["terminated", "stopped"]: continue
-            iid, itype = inst["InstanceId"], inst["InstanceType"]
-            name, asg = "N/A", None
-            for tag in inst.get("Tags", []):
-                if tag["Key"] == "Name": name = tag["Value"]
-                if tag["Key"] == "aws:autoscaling:groupName": asg = tag["Value"]
-            key = (name, itype)
-            instance_data[key]["count"] += 1
-            instance_data[key]["instance_ids"].append(iid)
-            instance_data[key]["asg"] = asg
-            for bd in inst.get("BlockDeviceMappings", []):
-                vid = bd.get("Ebs", {}).get("VolumeId")
-                if vid:
-                    vol = ec2.describe_volumes(VolumeIds=[vid])["Volumes"][0]
-                    instance_data[key]["ebs_info"].add((vol["VolumeType"], vol["Size"]))
-    for (name, itype), data in instance_data.items():
-        ids = data["instance_ids"]
-        id_disp = ids[0] if data["count"] == 1 else None
-        max_cpu, max_ts = None, None
-        if data["asg"]:
-            max_cpu, max_ts = get_max_cpu_utilization(data["asg"], 'AWS/EC2', 'AutoScalingGroupName')
-        elif ids:
-            for i in ids:
-                c, t = get_max_cpu_utilization(i)
-                if c and (max_cpu is None or c > max_cpu): max_cpu, max_ts = c, t
-        for ebs in data["ebs_info"] or [(None, None)]:
-            instances_info.append([name, id_disp, itype, data["count"], ebs[0], ebs[1], max_cpu, max_ts.isoformat() if max_ts else "N/A"])
-    return instances_info
-
-def get_rds_clusters():
-    rds = get_client("rds")
-    info, seen = [], set()
-    for c in rds.describe_db_clusters()["DBClusters"]:
-        if c["Engine"] == "docdb": continue
-        types = set()
-        for m in c["DBClusterMembers"]:
-            seen.add(m["DBInstanceIdentifier"])
-            types.add(rds.describe_db_instances(DBInstanceIdentifier=m["DBInstanceIdentifier"])["DBInstances"][0]["DBInstanceClass"])
-        cpu, ts = get_max_cpu_utilization(c["DBClusterIdentifier"], 'AWS/RDS', 'DBClusterIdentifier')
-        info.append([c["DBClusterIdentifier"], ", ".join(sorted(types)), len(c["DBClusterMembers"]), cpu, ts.isoformat() if ts else None])
-    for i in rds.describe_db_instances()["DBInstances"]:
-        if i["DBInstanceIdentifier"] in seen or i["Engine"] == "docdb": continue
-        cpu, ts = get_max_cpu_utilization(i["DBInstanceIdentifier"], 'AWS/RDS', 'DBInstanceIdentifier')
-        info.append([i["DBInstanceIdentifier"], i["DBInstanceClass"], 1, cpu, ts.isoformat() if ts else None])
-    return info
-
-def get_docdb_clusters():
-    docdb = get_client("docdb")
-    info = []
-    for c in docdb.describe_db_clusters()["DBClusters"]:
-        if c["Engine"] != "docdb": continue
-        types = set()
-        for m in c["DBClusterMembers"]:
-            types.add(docdb.describe_db_instances(DBInstanceIdentifier=m["DBInstanceIdentifier"])["DBInstances"][0]["DBInstanceClass"])
-        cpu, ts = get_max_cpu_utilization(c["DBClusterIdentifier"], 'AWS/DocDB', 'DBClusterIdentifier')
-        info.append([c["DBClusterIdentifier"], ", ".join(sorted(types)), len(c["DBClusterMembers"]), cpu, ts.isoformat() if ts else None])
-    return info
-
-def get_redis_clusters():
-    ec = get_client("elasticache")
-    info = []
-    for c in ec.describe_replication_groups()["ReplicationGroups"]:
-        cpu, ts = None, None
-        for n in c["MemberClusters"]:
-            cpu, ts = get_max_cpu_utilization(n, 'AWS/ElastiCache', 'CacheClusterId')
-        info.append([c["ReplicationGroupId"], c["CacheNodeType"], len(c["MemberClusters"]), cpu, ts.isoformat() if ts else None])
-    return info
-
-def get_memcache_clusters():
-    ec = get_client("elasticache")
-    info = []
-    for c in ec.describe_cache_clusters()["CacheClusters"]:
-        if c["Engine"] != "memcached": continue
-        cpu, ts = get_max_cpu_utilization(c["CacheClusterId"], 'AWS/ElastiCache', 'CacheClusterId')
-        info.append([c["CacheClusterId"], c["CacheNodeType"], c["NumCacheNodes"], cpu, ts.isoformat() if ts else None])
-    return info
-
-def output_results(ec2, rds, docdb, redis, memcache, file=None):
-    out = file or sys.stdout
-    print("\\nEC2 :", file=out)
-    print("Instance Name\\tInstance ID\\tInstance Type\\t台数\\tEBS Type\\tEBS Size\\tMax CPU\\tMax CPU Time", file=out)
-    for i in ec2: print("\\t".join(map(str, i)), file=out)
-    print("\\nRedis :", file=out)
-    print("Cluster Name\\tInstance Type\\t台数\\tMax CPU\\tMax CPU Time", file=out)
-    for c in redis: print("\\t".join(map(str, c)), file=out)
-    print("\\nMemcached :", file=out)
-    print("Cluster Name\\tInstance Type\\t台数\\tMax CPU\\tMax CPU Time", file=out)
-    for c in memcache: print("\\t".join(map(str, c)), file=out)
-    print("\\nRDS :", file=out)
-    print("Cluster Name\\tInstance Type\\t台数\\tMax CPU\\tMax CPU Time", file=out)
-    for c in rds: print("\\t".join(map(str, c)), file=out)
-    print("\\nDocumentDB :", file=out)
-    print("Cluster Name\\tInstance Type\\t台数\\tMax CPU\\tMax CPU Time", file=out)
-    for c in docdb: print("\\t".join(map(str, c)), file=out)
-
-def get_result_text(ec2, rds, docdb, redis, memcache):
-    buf = io.StringIO()
-    output_results(ec2, rds, docdb, redis, memcache, file=buf)
-    return buf.getvalue()
-
-def upload(text, url, analyze=False):
-    data = json.dumps({"action": "analyze_text" if analyze else "upload_only", "resource_text": text}).encode()
-    req = Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
-    try:
-        with urlopen(req, timeout=120) as r:
-            return json.loads(r.read().decode())
-    except Exception as e:
-        return {"error": str(e)}
-
-def log(msg, quiet=False):
-    if not quiet: print(msg, file=sys.stderr)
-
-def main():
-    parser = argparse.ArgumentParser(description='AWS インフラリソース情報を収集・分析')
-    parser.add_argument('--profile', '-p', type=str, help='AWSプロファイル名')
-    parser.add_argument('--output', '-o', type=str, help='出力ファイル名')
-    parser.add_argument('--stdout', '-s', action='store_true', help='標準出力に出力')
-    parser.add_argument('--upload', '-u', action='store_true', help='サーバーに自動アップロード')
-    parser.add_argument('--analyze', '-a', action='store_true', help='AI分析も実行')
-    parser.add_argument('--url', type=str, default=DEFAULT_URL, help='アップロード先URL')
-    parser.add_argument('--region', '-r', type=str, help='AWSリージョン')
-    parser.add_argument('--quiet', '-q', action='store_true', help='進捗非表示')
-    args = parser.parse_args()
-    
-    global _session
-    quiet = args.quiet or args.stdout
-    
-    if args.profile:
-        _session = boto3.Session(profile_name=args.profile, region_name=args.region) if args.region else boto3.Session(profile_name=args.profile)
-        log(f"Using profile: {args.profile}", quiet)
-    elif args.region:
-        _session = boto3.Session(region_name=args.region)
-    
-    log("Collecting...", quiet)
-    ec2 = get_ec2_instances(); log(f"  EC2: {len(ec2)}", quiet)
-    rds = get_rds_clusters(); log(f"  RDS: {len(rds)}", quiet)
-    docdb = get_docdb_clusters(); log(f"  DocDB: {len(docdb)}", quiet)
-    redis = get_redis_clusters(); log(f"  Redis: {len(redis)}", quiet)
-    memcache = get_memcache_clusters(); log(f"  Memcache: {len(memcache)}", quiet)
-    
-    text = get_result_text(ec2, rds, docdb, redis, memcache)
-
-    if args.upload:
-        log(f"Uploading to {args.url}...", quiet)
-        res = upload(text, args.url, args.analyze)
-        if "error" in res:
-            log(f"❌ Error: {res['error']}", False)
-            sys.exit(1)
-        log("✅ Upload successful!", quiet)
-        if args.analyze and "analysis" in res:
-            print("\\n" + "="*60 + "\\n🤖 AI サイジング提案\\n" + "="*60 + "\\n")
-            print(res["analysis"])
-        if args.output:
-            with open(args.output, "w") as f:
-                f.write(text)
-                if args.analyze and "analysis" in res:
-                    f.write("\\n\\n" + res["analysis"])
-            log(f"Also saved: {args.output}", quiet)
-    elif args.stdout:
-        output_results(ec2, rds, docdb, redis, memcache)
-    elif args.output:
-        with open(args.output, "w") as f:
-            output_results(ec2, rds, docdb, redis, memcache, file=f)
-        log(f"Saved: {args.output}", quiet)
-    else:
-        with open("output.txt", "w") as f:
-            output_results(ec2, rds, docdb, redis, memcache, file=f)
-        log("Saved: output.txt", quiet)
-
-if __name__ == "__main__":
-    main()
-'''
-
-
 def get_html_template():
     """フロントエンドHTMLを返す"""
     return '''<!DOCTYPE html>
@@ -1120,7 +1334,7 @@ def get_html_template():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AWS インフラコスト削減アナライザー</title>
+    <title>AWS費用削減ツール</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -1210,12 +1424,6 @@ def get_html_template():
             background-clip: text;
         }
 
-        .subtitle {
-            color: var(--text-secondary);
-            font-size: 1.1rem;
-            margin-top: 0.5rem;
-        }
-
         .main-card {
             background: var(--bg-card);
             border-radius: 20px;
@@ -1272,6 +1480,124 @@ def get_html_template():
             opacity: 0.6;
             cursor: not-allowed;
             transform: none;
+        }
+
+        /* SSO Login Section */
+        .sso-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .sso-section h3 {
+            color: var(--accent-cyan);
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+
+        .profile-select-group {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .profile-select {
+            flex: 1;
+            min-width: 200px;
+            padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .profile-select:focus {
+            outline: none;
+            border-color: var(--accent-cyan);
+        }
+
+        .profile-select option {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        .sso-status {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            display: none;
+        }
+
+        .sso-status.visible {
+            display: block;
+            animation: fadeInUp 0.3s ease-out;
+        }
+
+        .sso-code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2rem;
+            color: var(--accent-orange);
+            text-align: center;
+            padding: 1rem;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            margin: 1rem 0;
+            letter-spacing: 0.3em;
+        }
+
+        .sso-link {
+            color: var(--accent-cyan);
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .sso-link:hover {
+            text-decoration: underline;
+        }
+
+        .btn-sso {
+            background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+        }
+
+        .btn-sso:hover {
+            box-shadow: 0 8px 30px rgba(167, 139, 250, 0.4);
+        }
+
+        .account-badge {
+            display: inline-block;
+            background: var(--bg-secondary);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-left: 0.5rem;
+        }
+
+        .current-profile {
+            background: rgba(34, 211, 238, 0.1);
+            border: 1px solid var(--accent-cyan);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .current-profile.visible {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .current-profile .profile-name {
+            color: var(--accent-cyan);
+            font-weight: 500;
         }
 
         .tab-btn {
@@ -1432,14 +1758,37 @@ def get_html_template():
             white-space: nowrap;
         }
         
+        .cost-table .header-group .group-name {
+            background: var(--bg-secondary);
+        }
+        
         .cost-table .header-group .group-current {
-            background: rgba(34, 211, 238, 0.15);
+            background: rgba(34, 211, 238, 0.2);
             color: var(--accent-cyan);
+            border-left: 3px solid var(--accent-cyan);
+            font-size: 0.9rem;
         }
         
         .cost-table .header-group .group-recommend {
-            background: rgba(74, 222, 128, 0.15);
+            background: rgba(74, 222, 128, 0.2);
             color: var(--accent-green);
+            border-left: 3px solid var(--accent-green);
+            font-size: 0.9rem;
+        }
+        
+        .cost-table .header-group .group-cpu {
+            background: rgba(251, 146, 60, 0.2);
+            color: var(--accent-orange);
+            border-left: 3px solid var(--accent-orange);
+            font-size: 0.9rem;
+        }
+        
+        .cost-table .header-group .group-comment {
+            background: var(--bg-secondary);
+        }
+        
+        .cost-table .cpu-section {
+            background: rgba(251, 146, 60, 0.03);
         }
         
         .cost-table .header-detail th {
@@ -1469,6 +1818,36 @@ def get_html_template():
             color: var(--text-primary);
             max-width: 200px;
             overflow: hidden;
+        }
+        
+        .cost-table .group-badge {
+            display: inline-block;
+            font-size: 0.7rem;
+            padding: 0.1rem 0.3rem;
+            background: rgba(168, 85, 247, 0.2);
+            color: #a855f7;
+            border-radius: 4px;
+            margin-left: 0.3rem;
+            vertical-align: middle;
+        }
+        
+        .cost-table .asg-badge {
+            display: inline-block;
+            font-size: 0.7rem;
+            padding: 0.1rem 0.3rem;
+            background: rgba(251, 191, 36, 0.2);
+            color: #f59e0b;
+            border-radius: 4px;
+            margin-left: 0.3rem;
+            vertical-align: middle;
+        }
+        
+        .cost-table .grouped-row {
+            background: rgba(168, 85, 247, 0.03);
+        }
+        
+        .cost-table .asg-row {
+            background: rgba(251, 191, 36, 0.03);
             text-overflow: ellipsis;
         }
         
@@ -1488,18 +1867,17 @@ def get_html_template():
             color: var(--accent-cyan);
         }
         
-        .cost-table .recommend-cell {
-            color: var(--accent-green);
+        .cost-table .type-cell {
             font-weight: 500;
         }
         
         .cost-table .savings-cell {
+            text-align: right;
             font-weight: 600;
         }
         
         .cost-table .savings-cell.positive {
             color: var(--accent-green);
-            background: rgba(74, 222, 128, 0.1);
         }
         
         .cost-table .ai-comment-cell {
@@ -1510,6 +1888,29 @@ def get_html_template():
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+        
+        /* セクション区切り */
+        .cost-table .current-section {
+            background: rgba(34, 211, 238, 0.03);
+        }
+        
+        .cost-table .recommend-section {
+            background: rgba(74, 222, 128, 0.03);
+        }
+        
+        .cost-table .section-border-right {
+            border-right: 2px solid var(--border-color);
+        }
+        
+        /* 予測CPU値のスタイル - 現状と同じ見た目 */
+        .cpu-badge.predicted {
+            /* ~プレフィックスで予測を区別 */
+        }
+        
+        /* ヘッダー2行目のセクション背景 */
+        .cost-table .header-detail th:nth-child(n+1):nth-child(-n+8) {
+            background: rgba(34, 211, 238, 0.05);
         }
 
         .analysis-card {
@@ -1559,6 +1960,33 @@ def get_html_template():
             padding: 1rem 1.5rem;
             border-bottom: 1px solid var(--border-color);
             background: var(--bg-secondary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .copy-btn {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.8rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        
+        .copy-btn:hover {
+            background: var(--accent-cyan);
+            color: var(--bg-primary);
+            border-color: var(--accent-cyan);
+        }
+        
+        .copy-btn.copied {
+            background: var(--accent-green);
+            color: var(--bg-primary);
+            border-color: var(--accent-green);
         }
 
         .resource-card-body {
@@ -1604,10 +2032,46 @@ def get_html_template():
         <header>
             <div class="logo">
                 <div class="logo-icon">📊</div>
-                <h1>AWS インフラコスト削減</h1>
+                <h1>AWS費用削減ツール</h1>
             </div>
-            <p class="subtitle">EC2・RDS・ElastiCache・DocumentDB のサイジング最適化提案</p>
         </header>
+
+        <!-- SSO ログインセクション -->
+        <div class="sso-section">
+            <h3>🔐 アカウント選択 & SSO ログイン</h3>
+            
+            <div class="current-profile" id="currentProfile">
+                <span>✅ ログイン中:</span>
+                <span class="profile-name" id="currentProfileName"></span>
+                <span class="account-badge" id="currentAccountId"></span>
+                <button onclick="logout()" style="margin-left: auto; padding: 0.25rem 0.5rem; font-size: 0.85rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-secondary); cursor: pointer;">ログアウト</button>
+            </div>
+            
+            <div class="profile-select-group">
+                <select class="profile-select" id="profileSelect">
+                    <option value="">-- アカウントを選択 --</option>
+                </select>
+                <button class="btn btn-sso" onclick="startSsoLogin()" id="ssoLoginBtn">
+                    <span>🔑</span>
+                    SSO ログイン
+                </button>
+            </div>
+            
+            <div class="sso-status" id="ssoStatus">
+                <p id="ssoMessage">以下のリンクを開いて認証してください:</p>
+                <div class="sso-code" id="ssoCode">XXXX-XXXX</div>
+                <p>
+                    <a class="sso-link" id="ssoLink" href="#" target="_blank">認証ページを開く</a>
+                </p>
+                <p style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                    認証が完了したら下のボタンをクリックしてください
+                </p>
+                <button class="btn btn-primary" onclick="completeSsoLogin()" id="completeLoginBtn" style="margin-top: 1rem;">
+                    <span>✅</span>
+                    認証完了
+                </button>
+            </div>
+        </div>
 
         <div class="main-card">
             <div class="button-group">
@@ -1685,11 +2149,14 @@ def get_html_template():
         // フォールバック用の固定価格データ
         const FALLBACK_PRICES = {
             ec2: {
-                't3.nano': 0.0052, 't3.micro': 0.0104, 't3.small': 0.0208, 't3.medium': 0.0416, 't3.large': 0.0832,
-                't3a.nano': 0.0047, 't3a.micro': 0.0094, 't3a.small': 0.0188, 't3a.medium': 0.0376, 't3a.large': 0.0752,
-                't4g.nano': 0.0042, 't4g.micro': 0.0084, 't4g.small': 0.0168, 't4g.medium': 0.0336, 't4g.large': 0.0672,
-                'm5.large': 0.096, 'm5.xlarge': 0.192, 'm6i.large': 0.096,
-                'c5.large': 0.085, 'c5.xlarge': 0.17, 'r5.large': 0.126
+                't3.nano': 0.0052, 't3.micro': 0.0104, 't3.small': 0.0208, 't3.medium': 0.0416, 't3.large': 0.0832, 't3.xlarge': 0.1664, 't3.2xlarge': 0.3328,
+                't3a.nano': 0.0047, 't3a.micro': 0.0094, 't3a.small': 0.0188, 't3a.medium': 0.0376, 't3a.large': 0.0752, 't3a.xlarge': 0.1504, 't3a.2xlarge': 0.3008,
+                't4g.nano': 0.0042, 't4g.micro': 0.0084, 't4g.small': 0.0168, 't4g.medium': 0.0336, 't4g.large': 0.0672, 't4g.xlarge': 0.1344, 't4g.2xlarge': 0.2688,
+                'm5.large': 0.096, 'm5.xlarge': 0.192, 'm5.2xlarge': 0.384, 'm6i.large': 0.096, 'm6i.xlarge': 0.192,
+                'c5.large': 0.085, 'c5.xlarge': 0.17, 'c5.2xlarge': 0.34, 'c5.4xlarge': 0.68,
+                'c5a.large': 0.077, 'c5a.xlarge': 0.154, 'c5a.2xlarge': 0.308, 'c5a.4xlarge': 0.616,
+                'c6i.large': 0.085, 'c6i.xlarge': 0.17, 'c6i.2xlarge': 0.34,
+                'r5.large': 0.126, 'r5.xlarge': 0.252, 'r5.2xlarge': 0.504
             },
             rds: {
                 'db.t3.micro': 0.018, 'db.t3.small': 0.036, 'db.t3.medium': 0.072, 'db.t3.large': 0.144,
@@ -1725,6 +2192,17 @@ def get_html_template():
             return 0.05;
         }
         
+        // スケールダウン（価格が下がる）かどうかをチェック
+        function isScaleDown(currentType, recommendedType, service = 'ec2') {
+            if (!currentType || !recommendedType || currentType === recommendedType) {
+                return false;
+            }
+            const currentPrice = getInstancePrice(currentType, service);
+            const recommendedPrice = getInstancePrice(recommendedType, service);
+            // 推奨価格が現在価格より低い場合のみスケールダウンとみなす
+            return recommendedPrice < currentPrice;
+        }
+        
         function setPricingData(pricing) {
             if (pricing) {
                 mcpPricing = pricing;
@@ -1740,7 +2218,235 @@ def get_html_template():
             if (amount === null || amount === undefined) return '-';
             return '$' + amount.toFixed(2);
         }
+        
+        // セクションデータをクリップボードにコピー
+        function copySectionData(sectionKey, btn) {
+            if (!globalResources || !globalResources[sectionKey]) {
+                alert('データがありません');
+                return;
+            }
+            
+            const data = globalResources[sectionKey];
+            const isEc2 = sectionKey === 'ec2';
+            
+            let rows = [];
+            
+            // グループ化されたデータを取得
+            const processedData = isEc2 ? groupAutoScaleInstances(data) : data;
+            
+            processedData.forEach(item => {
+                const name = item.name || '-';
+                const instanceId = item.instance_id || '-';
+                const instanceType = item.instance_type || '-';
+                const count = item.count || 1;
+                
+                // MCP提案を取得
+                const mcpRec = globalMcpRecommendations ? globalMcpRecommendations[name] : null;
+                let recType = '';  // 提案がない場合は空
+                let recCount = '';  // 提案がない場合は空
+                
+                if (mcpRec && mcpRec.recommendation) {
+                    recType = mcpRec.recommendation.recommended_type;
+                    recCount = count;  // 台数は現状と同じ
+                }
+                
+                // 行を作成: インスタンス名, インスタンスID, サイズ, 台数, (EBS), (月額), (合計), 提案サイズ, 提案台数
+                // EBS・月額・合計は計算式なので空欄でスキップ
+                let row;
+                if (isEc2) {
+                    row = `${name}\\t${instanceId}\\t${instanceType}\\t${count}\\t\\t\\t\\t${recType}\\t${recCount}`;
+                } else {
+                    // RDS/DocDB/ElastiCacheはIDがないので空欄
+                    row = `${name}\\t\\t${instanceType}\\t${count}\\t\\t\\t\\t${recType}\\t${recCount}`;
+                }
+                rows.push(row);
+            });
+            
+            const text = rows.join('\\n');
+            
+            // クリップボードにコピー
+            navigator.clipboard.writeText(text).then(() => {
+                // ボタンのスタイルを一時的に変更
+                const originalText = btn.textContent;
+                btn.textContent = '✓ コピー完了';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Copy failed:', err);
+                alert('コピーに失敗しました');
+            });
+        }
 
+        // サイズ順序定義（共通）
+        const SIZE_ORDER = {
+            'nano': 0.25, 'micro': 0.5, 'small': 1, 'medium': 2, 
+            'large': 4, 'xlarge': 8, '2xlarge': 16, '4xlarge': 32, 
+            '8xlarge': 64, '12xlarge': 96, '16xlarge': 128, '24xlarge': 192
+        };
+        const SIZE_NAMES = ['nano', 'micro', 'small', 'medium', 'large', 'xlarge', '2xlarge', '4xlarge', '8xlarge', '12xlarge', '16xlarge', '24xlarge'];
+        
+        // インスタンスタイプからサイズ係数を推定（CPU予測用）
+        function getInstanceSizeRatio(fromType, toType) {
+            if (!fromType || !toType || fromType === '-' || toType === '-') return null;
+            
+            // タイプからサイズを抽出 (例: t3.medium -> medium, db.r5.large -> large)
+            const getSize = (type) => {
+                const parts = type.split('.');
+                const sizePart = parts[parts.length - 1];
+                return SIZE_ORDER[sizePart] || null;
+            };
+            
+            const fromSize = getSize(fromType);
+            const toSize = getSize(toType);
+            
+            if (fromSize && toSize && toSize > 0) {
+                return fromSize / toSize;
+            }
+            return null;
+        }
+        
+        // 自動スケールダウン候補を計算（Bedrockの提案がない場合用）
+        // ファミリー別の最小サイズ
+        const FAMILY_MIN_SIZE = {
+            // EC2 - C/M/R系は large が最小
+            'c5': 'large', 'c5a': 'large', 'c5n': 'large', 'c6i': 'large', 'c6a': 'large', 'c6g': 'large', 'c7g': 'large',
+            'm5': 'large', 'm5a': 'large', 'm5n': 'large', 'm6i': 'large', 'm6a': 'large', 'm6g': 'large', 'm7g': 'large',
+            'r5': 'large', 'r5a': 'large', 'r5n': 'large', 'r6i': 'large', 'r6a': 'large', 'r6g': 'large', 'r7g': 'large',
+            // T系は nano が最小
+            't3': 'nano', 't3a': 'nano', 't4g': 'nano',
+            // RDS
+            'db.r5': 'large', 'db.r6g': 'large', 'db.m5': 'large', 'db.m6g': 'large',
+            'db.t3': 'micro', 'db.t4g': 'micro',
+            // ElastiCache
+            'cache.r5': 'large', 'cache.r6g': 'large', 'cache.m5': 'large', 'cache.m6g': 'large',
+            'cache.t3': 'micro', 'cache.t4g': 'micro',
+        };
+        
+        function calculateAutoScaleDown(instanceType, cpuAvgMax, service = 'ec2') {
+            if (!instanceType || cpuAvgMax === null || cpuAvgMax >= 50) {
+                return null;  // 過剰スペックでない場合は提案しない
+            }
+            
+            // インスタンスタイプをパース（例: t3a.large -> {prefix: 't3a', family: 't3a', size: 'large'}）
+            const parts = instanceType.split('.');
+            if (parts.length < 2) return null;
+            
+            const prefix = parts.slice(0, -1).join('.');  // db.t3, cache.t3, t3a など
+            const currentSize = parts[parts.length - 1];
+            const currentSizeValue = SIZE_ORDER[currentSize];
+            if (!currentSizeValue) return null;
+            
+            // ファミリーの最小サイズを取得
+            const minSize = FAMILY_MIN_SIZE[prefix] || 'nano';
+            const minSizeIndex = SIZE_NAMES.indexOf(minSize);
+            
+            // 小さいサイズを順番に試す
+            const currentSizeIndex = SIZE_NAMES.indexOf(currentSize);
+            if (currentSizeIndex <= minSizeIndex) return null;  // 既に最小サイズ
+            
+            let bestCandidate = null;
+            
+            // 最小サイズまでしか試さない
+            for (let i = currentSizeIndex - 1; i >= minSizeIndex; i--) {
+                const candidateSize = SIZE_NAMES[i];
+                const candidateType = prefix + '.' + candidateSize;
+                const candidateSizeValue = SIZE_ORDER[candidateSize];
+                
+                // 予測CPU計算
+                const ratio = currentSizeValue / candidateSizeValue;
+                const predictedCpu = cpuAvgMax * ratio;
+                
+                // 価格が取得できるか確認
+                const candidatePrice = getInstancePrice(candidateType, service);
+                const currentPrice = getInstancePrice(instanceType, service);
+                
+                // 価格が下がり、予測CPUが70%以下なら候補
+                if (candidatePrice < currentPrice && predictedCpu <= 70) {
+                    bestCandidate = {
+                        type: candidateType,
+                        predictedCpu: predictedCpu,
+                        price: candidatePrice
+                    };
+                    // 予測CPUが50-70%なら理想的なのでここで終了
+                    if (predictedCpu >= 50) {
+                        break;
+                    }
+                    // 50%未満でも続けて、より小さいサイズを探す
+                } else if (predictedCpu > 70) {
+                    // これ以上小さくするとCPU高すぎ、前の候補を使う
+                    break;
+                }
+            }
+            
+            return bestCandidate;
+        }
+        
+        // オートスケールインスタンスを名前でグループ化
+        function groupAutoScaleInstances(data) {
+            if (!data || data.length === 0) return [];
+            
+            const groups = {};
+            
+            data.forEach(item => {
+                const name = item.name || '-';
+                
+                if (!groups[name]) {
+                    groups[name] = {
+                        name: name,
+                        instance_type: item.instance_type,
+                        count: 0,
+                        instances: [],
+                        ebs_type: item.ebs_type,
+                        ebs_size: parseInt(item.ebs_size) || parseInt(item.ebs_size_gb) || 0,
+                        cpu_avg_max_values: [],
+                        cpu_max_values: []
+                    };
+                }
+                
+                const group = groups[name];
+                group.count += (item.count || 1);
+                group.instances.push(item.instance_id || '-');
+                
+                const cpuAvgMax = item.cpu_avg_max ?? item.max_cpu ?? null;
+                const cpuMax = item.cpu_max ?? null;
+                
+                if (cpuAvgMax !== null) group.cpu_avg_max_values.push(cpuAvgMax);
+                if (cpuMax !== null) group.cpu_max_values.push(cpuMax);
+            });
+            
+            // グループを配列に変換し、集計値を計算
+            return Object.values(groups).map(group => {
+                // CPU AvgMax: グループ内の平均（オートスケールの場合、全体の平均が意味を持つ）
+                const avgMaxAvg = group.cpu_avg_max_values.length > 0
+                    ? group.cpu_avg_max_values.reduce((a, b) => a + b, 0) / group.cpu_avg_max_values.length
+                    : null;
+                
+                // CPU Max: グループ内の最大値
+                const maxMax = group.cpu_max_values.length > 0
+                    ? Math.max(...group.cpu_max_values)
+                    : null;
+                
+                return {
+                    name: group.name,
+                    instance_id: group.instances.length > 1 
+                        ? `(${group.instances.length}台)` 
+                        : group.instances[0],
+                    instance_type: group.instance_type,
+                    count: group.count,
+                    ebs_type: group.ebs_type,
+                    ebs_size: group.ebs_size,
+                    ebs_size_gb: group.ebs_size,
+                    cpu_avg_max: avgMaxAvg,
+                    cpu_max: maxMax,
+                    _instance_count: group.instances.length,
+                    _is_grouped: group.instances.length > 1
+                };
+            });
+        }
+        
         function createCostTable(data, service, aiRecommendations) {
             if (!data || data.length === 0) {
                 return '<div class="empty-state"><div class="icon">📭</div><p>データがありません</p></div>';
@@ -1749,35 +2455,44 @@ def get_html_template():
             const isEc2 = service === 'ec2';
             const HOURS_PER_MONTH = 730;
             
+            // EC2の場合、同名インスタンス（オートスケール等）をグループ化
+            const processedData = isEc2 ? groupAutoScaleInstances(data) : data;
+            
             let html = '<div class="cost-table-wrapper"><table class="cost-table"><thead>';
             
-            // ヘッダー1行目（グループ）
+            // ヘッダー1行目（グループ）- 現状、変更提案、CPU使用率を分離
             html += '<tr class="header-group">';
-            html += '<th rowspan="2">名前</th>';
-            if (isEc2) html += '<th rowspan="2">ID</th>';
-            html += '<th colspan="' + (isEc2 ? '6' : '3') + '" class="group-current">現状</th>';
-            html += '<th colspan="3" class="group-recommend">変更提案</th>';
-            html += '<th rowspan="2">CPU AvgMax</th>';
-            html += '<th rowspan="2">CPU Max</th>';
-            html += '<th rowspan="2">AIコメント</th>';
+            html += '<th rowspan="2" class="group-name">名前</th>';
+            if (isEc2) html += '<th rowspan="2" class="group-name">ID</th>';
+            // 現状グループ: EC2は6列（タイプ、台数、月額、EBS、GB、EBS料金）、その他は3列
+            html += '<th colspan="' + (isEc2 ? '6' : '3') + '" class="group-current">📊 現状</th>';
+            // 変更提案グループ: 3列（タイプ、月額、削減額）
+            html += '<th colspan="3" class="group-recommend">💡 変更提案</th>';
+            // CPU使用率グループ: 4列（AvgMax、Max、予測AvgMax、予測Max）
+            html += '<th colspan="4" class="group-cpu">📈 CPU使用率</th>';
+            html += '<th rowspan="2" class="group-comment">AIコメント</th>';
             html += '</tr>';
             
             // ヘッダー2行目（詳細）
             html += '<tr class="header-detail">';
+            // 現状の詳細
             html += '<th>タイプ</th><th>台数</th><th>月額</th>';
             if (isEc2) html += '<th>EBS</th><th>GB</th><th>EBS料金</th>';
+            // 変更提案の詳細
             html += '<th>提案タイプ</th><th>月額</th><th>削減額</th>';
+            // CPU使用率の詳細
+            html += '<th>AvgMax</th><th>Max</th><th>予測Avg</th><th>予測Max</th>';
             html += '</tr></thead><tbody>';
             
-            data.forEach(item => {
+            processedData.forEach(item => {
                 const name = item.name || '-';
                 const instanceId = item.instance_id || '-';
                 const instanceType = item.instance_type || '-';
                 const count = item.count || 1;
                 const ebsType = item.ebs_type || '-';
-                const ebsSize = parseInt(item.ebs_size) || 0;
-                const cpuAvgMax = item.cpu_avg_max;
-                const cpuMax = item.cpu_max;
+                const ebsSize = parseInt(item.ebs_size) || parseInt(item.ebs_size_gb) || 0;
+                const cpuAvgMax = item.cpu_avg_max ?? item.max_cpu ?? null;
+                const cpuMax = item.cpu_max ?? null;
                 
                 // 現状コスト計算
                 const hourlyPrice = getInstancePrice(instanceType, service);
@@ -1785,34 +2500,202 @@ def get_html_template():
                 const monthlyEbs = isEc2 ? getEbsPrice(ebsType) * ebsSize * count : 0;
                 const monthlyTotal = monthlyInstance + monthlyEbs;
                 
-                // AI提案を検索
-                const rec = aiRecommendations ? aiRecommendations.find(r => 
-                    r.name === name || (item.instance_id && r.instance_id === item.instance_id)
-                ) : null;
+                // MCP提案を優先検索（名前で検索）
+                const mcpRec = globalMcpRecommendations ? globalMcpRecommendations[name] : null;
                 
-                const recType = rec ? rec.recommended_type : '-';
-                const recPrice = rec && rec.recommended_type !== '-' ? getInstancePrice(rec.recommended_type, service) : null;
-                const recMonthly = recPrice ? recPrice * HOURS_PER_MONTH * count + monthlyEbs : null;
-                const savings = recMonthly !== null ? monthlyTotal - recMonthly : null;
-                const aiComment = rec ? rec.note || (rec.recommended_type !== '-' ? '変更推奨' : '変更不要') : '-';
+                // AI提案を検索（部分一致・正規化対応）- MCPがない場合のフォールバック
+                const normalizeNameForMatch = (n) => {
+                    if (!n) return '';
+                    return n.toLowerCase()
+                        .replace(/[《》【】\[\]\(\)「」『』]/g, '')  // 括弧類を削除
+                        .replace(/[\s\-_]/g, '')  // 空白・ハイフン・アンダースコアを削除
+                        .trim();
+                };
+                const normalizedName = normalizeNameForMatch(name);
+                const rec = aiRecommendations ? aiRecommendations.find(r => {
+                    const normalizedRecName = normalizeNameForMatch(r.name);
+                    // 完全一致、または正規化後の部分一致
+                    return r.name === name || 
+                           normalizedRecName === normalizedName ||
+                           normalizedName.includes(normalizedRecName) ||
+                           normalizedRecName.includes(normalizedName) ||
+                           (item.instance_id && r.instance_id === item.instance_id);
+                }) : null;
                 
-                html += '<tr>';
-                html += `<td class="name-cell">${name}</td>`;
-                if (isEc2) html += `<td class="id-cell">${instanceId !== 'None' ? instanceId : '-'}</td>`;
-                html += `<td>${instanceType}</td>`;
-                html += `<td class="num-cell">${count}</td>`;
-                html += `<td class="money-cell">${formatMoney(monthlyInstance)}</td>`;
-                if (isEc2) {
-                    html += `<td>${ebsType}</td>`;
-                    html += `<td class="num-cell">${ebsSize || '-'}</td>`;
-                    html += `<td class="money-cell">${ebsSize ? formatMoney(monthlyEbs) : '-'}</td>`;
+                // CPU予測とコスト計算用の変数
+                let predictedCpuAvg = null;
+                let predictedCpuMax = null;
+                let actualRecType = '-';
+                let actualRecMonthly = null;
+                let actualSavings = null;
+                let actualAiComment = '-';
+                
+                // CPU値に基づいて正しい判定を決定
+                if (cpuAvgMax !== null && cpuAvgMax !== undefined) {
+                    if (cpuAvgMax < 50) {
+                        actualAiComment = '過剰スペック';
+                    } else if (cpuAvgMax <= 70) {
+                        actualAiComment = '適正';
+                    } else {
+                        actualAiComment = 'スペック不足';
+                    }
+                } else {
+                    // CPUデータがない場合
+                    actualAiComment = '-';
                 }
-                html += `<td class="recommend-cell">${recType}</td>`;
-                html += `<td class="money-cell">${recMonthly !== null ? formatMoney(recMonthly) : '-'}</td>`;
-                html += `<td class="savings-cell ${savings > 0 ? 'positive' : ''}">${savings !== null && savings > 0 ? '-' + formatMoney(savings) + '/月' : '-'}</td>`;
-                html += `<td><span class="cpu-badge ${getCpuClass(cpuAvgMax)}">${formatCpu(cpuAvgMax)}</span></td>`;
-                html += `<td><span class="cpu-badge ${getCpuClass(cpuMax)}">${formatCpu(cpuMax)}</span></td>`;
-                html += `<td class="ai-comment-cell">${aiComment}</td>`;
+                
+                // 1. MCP提案を優先使用（サーバーサイドで計算済み）
+                if (mcpRec && mcpRec.recommendation) {
+                    const mcpData = mcpRec.recommendation;
+                    actualRecType = mcpData.recommended_type;
+                    predictedCpuAvg = mcpData.predicted_cpu;
+                    
+                    // 価格計算
+                    const recPrice = mcpData.recommended_price || getInstancePrice(actualRecType, service);
+                    actualRecMonthly = recPrice * HOURS_PER_MONTH * count + monthlyEbs;
+                    actualSavings = monthlyTotal - actualRecMonthly;
+                    
+                    // Max予測
+                    if (cpuMax !== null) {
+                        const ratio = getInstanceSizeRatio(instanceType, actualRecType);
+                        if (ratio) predictedCpuMax = Math.min(cpuMax * ratio, 100);
+                    }
+                    
+                    // コメント設定
+                    actualAiComment = mcpRec.reason || (predictedCpuAvg >= 50 ? '変更推奨' : '過剰（更に削減余地あり）');
+                    console.log('Using MCP recommendation:', name, instanceType, '->', actualRecType, 'predicted:', predictedCpuAvg + '%');
+                }
+                // 2. MCPに提案がなく、reasonがある場合はそれを表示
+                else if (mcpRec && mcpRec.reason) {
+                    actualAiComment = mcpRec.reason;
+                }
+                // 3. Bedrockの提案（フォールバック）
+                else if (rec && rec.recommended_type && rec.recommended_type !== '-' && cpuAvgMax !== null) {
+                    // 提案されたインスタンスタイプが存在するか検証
+                    const isValidInstanceType = (recType) => {
+                        const parts = recType.split('.');
+                        if (parts.length < 2) return false;
+                        const family = parts.slice(0, -1).join('.');
+                        const size = parts[parts.length - 1];
+                        const minSize = FAMILY_MIN_SIZE[family];
+                        if (minSize) {
+                            const minIdx = SIZE_NAMES.indexOf(minSize);
+                            const sizeIdx = SIZE_NAMES.indexOf(size);
+                            if (sizeIdx < minIdx) return false;  // 最小サイズより小さい → 存在しない
+                        }
+                        return true;
+                    };
+                    
+                    if (!isValidInstanceType(rec.recommended_type)) {
+                        console.log('Rejected invalid instance type:', rec.recommended_type);
+                    } else {
+                        const ratio = getInstanceSizeRatio(instanceType, rec.recommended_type);
+                        if (ratio !== null) {
+                            predictedCpuAvg = Math.min(cpuAvgMax * ratio, 100);
+                            if (cpuMax !== null) {
+                                predictedCpuMax = Math.min(cpuMax * ratio, 100);
+                            }
+                            
+                            // 予測CPUが70%超の場合のみ却下
+                            if (predictedCpuAvg > 70) {
+                                console.log('Rejected Bedrock recommendation (predicted CPU > 70%):', instanceType, '->', rec.recommended_type);
+                            } else {
+                                actualRecType = rec.recommended_type;
+                                const recPrice = getInstancePrice(actualRecType, service);
+                                actualRecMonthly = recPrice * HOURS_PER_MONTH * count + monthlyEbs;
+                                actualSavings = monthlyTotal - actualRecMonthly;
+                                actualAiComment = predictedCpuAvg >= 50 ? '変更推奨' : '過剰（更に削減余地あり）';
+                            }
+                        }
+                    }
+                }
+                // 4. ローカル自動計算（最終フォールバック）
+                else if (cpuAvgMax !== null && cpuAvgMax < 50) {
+                    const autoRec = calculateAutoScaleDown(instanceType, cpuAvgMax, service);
+                    if (autoRec) {
+                        actualRecType = autoRec.type;
+                        const autoRecMonthly = autoRec.price * HOURS_PER_MONTH * count + monthlyEbs;
+                        actualRecMonthly = autoRecMonthly;
+                        actualSavings = monthlyTotal - autoRecMonthly;
+                        predictedCpuAvg = autoRec.predictedCpu;
+                        if (cpuMax !== null) {
+                            const ratio = getInstanceSizeRatio(instanceType, autoRec.type);
+                            if (ratio) predictedCpuMax = Math.min(cpuMax * ratio, 100);
+                        }
+                        actualAiComment = predictedCpuAvg >= 50 ? '変更推奨（ローカル計算）' : '過剰（更に削減余地あり）';
+                        console.log('Using local auto-calculation:', instanceType, '->', autoRec.type);
+                    } else {
+                        // 自動計算でも提案がない場合は最小構成の可能性
+                        const sizePart = instanceType.split('.').pop();
+                        if (sizePart === 'nano' || sizePart === 'micro') {
+                            actualAiComment = '最小構成';
+                        }
+                    }
+                }
+                
+                // 最小構成チェック（MCPやBedrockで提案がない場合）
+                if (actualRecType === '-' && (cpuAvgMax === null || cpuAvgMax < 50)) {
+                    const sizePart = instanceType.split('.').pop();
+                    // ファミリー別の最小サイズ判定
+                    const isMinSize = (() => {
+                        // db.r系, db.m系, cache.r系, cache.m系 は large が最小
+                        if (instanceType.match(/^(db\.|cache\.)(r|m)\d+g?\./)) {
+                            return sizePart === 'large';
+                        }
+                        // EC2 c系, m系, r系 は large が最小
+                        if (instanceType.match(/^(c5|c5a|c5n|c6|c7|m5|m5a|m6|m7|r5|r5a|r6|r7)/)) {
+                            return sizePart === 'large';
+                        }
+                        // t系は nano が最小
+                        return sizePart === 'nano' || sizePart === 'micro';
+                    })();
+                    
+                    if (isMinSize) {
+                        actualAiComment = '最小構成';
+                    } else if (cpuAvgMax === null) {
+                        // CPUデータなし
+                        actualAiComment = 'CPU取得不可';
+                    }
+                }
+                
+                // 変更提案がない場合はCPU予測をクリア
+                if (actualRecType === '-') {
+                    predictedCpuAvg = null;
+                    predictedCpuMax = null;
+                }
+                
+                const isAsg = item.is_auto_scaling || item.auto_scaling_group;
+                const rowClass = isAsg ? 'asg-row' : (item._is_grouped ? 'grouped-row' : '');
+                html += '<tr' + (rowClass ? ` class="${rowClass}"` : '') + '>';
+                // 名前・ID
+                const badge = isAsg 
+                    ? ' <span class="asg-badge">⚡ASG</span>'
+                    : (item._is_grouped ? ' <span class="group-badge">🔗グループ</span>' : '');
+                html += `<td class="name-cell">${name}${badge}</td>`;
+                if (isEc2) html += `<td class="id-cell">${instanceId !== 'None' ? instanceId : '-'}</td>`;
+                // 現状セクション（CPU以外）
+                html += `<td class="current-section type-cell">${instanceType}</td>`;
+                html += `<td class="current-section num-cell">${count}</td>`;
+                if (isEc2) {
+                    html += `<td class="current-section money-cell">${formatMoney(monthlyInstance)}</td>`;
+                    html += `<td class="current-section">${ebsType}</td>`;
+                    html += `<td class="current-section num-cell">${ebsSize || '-'}</td>`;
+                    html += `<td class="current-section section-border-right money-cell">${ebsSize ? formatMoney(monthlyEbs) : '-'}</td>`;
+                } else {
+                    html += `<td class="current-section section-border-right money-cell">${formatMoney(monthlyInstance)}</td>`;
+                }
+                // 変更提案セクション（CPU予測以外）
+                html += `<td class="recommend-section type-cell">${actualRecType}</td>`;
+                html += `<td class="recommend-section money-cell">${actualRecMonthly !== null ? formatMoney(actualRecMonthly) : '-'}</td>`;
+                html += `<td class="recommend-section section-border-right savings-cell ${actualSavings > 0 ? 'positive' : ''}">${actualSavings !== null && actualSavings > 0 ? '-' + formatMoney(actualSavings) + '/月' : '-'}</td>`;
+                // CPU使用率セクション（変更提案がある場合のみ表示）
+                const showCpu = actualRecType !== '-';
+                html += `<td class="cpu-section">${showCpu ? `<span class="cpu-badge ${getCpuClass(cpuAvgMax)}">${formatCpu(cpuAvgMax)}</span>` : '-'}</td>`;
+                html += `<td class="cpu-section">${showCpu ? `<span class="cpu-badge ${getCpuClass(cpuMax)}">${formatCpu(cpuMax)}</span>` : '-'}</td>`;
+                html += `<td class="cpu-section">${showCpu && predictedCpuAvg !== null ? `<span class="cpu-badge ${getCpuClass(predictedCpuAvg)} predicted">~${predictedCpuAvg.toFixed(1)}%</span>` : '-'}</td>`;
+                html += `<td class="cpu-section section-border-right">${showCpu && predictedCpuMax !== null ? `<span class="cpu-badge ${getCpuClass(predictedCpuMax)} predicted">~${predictedCpuMax.toFixed(1)}%</span>` : '-'}</td>`;
+                // AIコメント
+                html += `<td class="ai-comment-cell">${actualAiComment}</td>`;
                 html += '</tr>';
             });
             
@@ -1854,6 +2737,7 @@ def get_html_template():
         // グローバル変数
         let globalAiRecommendations = {};
         let globalResources = null;
+        let globalMcpRecommendations = {};  // MCPからの推奨
         
         // AI分析結果から提案を抽出
         function parseAiRecommendations(analysisText) {
@@ -1881,8 +2765,17 @@ def get_html_template():
                         name: nameMatch[1].trim().replace(/\\*\\*/g, ''),
                         recommended_type: '-',
                         note: '',
-                        judgment: ''
+                        judgment: '',
+                        current_type: ''
                     };
+                }
+                
+                // 現在のタイプを検出（現在: タイプ 形式）
+                if (currentInstance && line.includes('現在:')) {
+                    const typeMatch = line.match(/現在:\\s*((?:db\\.|cache\\.)?[a-z][a-z0-9]*\\.[a-z0-9]+)/i);
+                    if (typeMatch) {
+                        currentInstance.current_type = typeMatch[1];
+                    }
                 }
                 
                 // 判定行を検出
@@ -1913,11 +2806,20 @@ def get_html_template():
                         } else if (proposal.includes('変更不要') || proposal.includes('維持')) {
                             currentInstance.note = currentInstance.judgment || '適正';
                         } else {
-                            // タイプ抽出 (t3.medium, db.t3.medium, cache.t3.medium など) - スケールダウンのみ
+                            // タイプ抽出 (t3.medium, db.t3.medium, cache.t3.medium など)
                             const typeMatch = proposal.match(/((?:db\\.|cache\\.)?[a-z][a-z0-9]*\\.[a-z0-9]+)/i);
                             if (typeMatch) {
-                                currentInstance.recommended_type = typeMatch[1];
-                                currentInstance.note = currentInstance.judgment || '過剰スペック';
+                                const recommendedType = typeMatch[1];
+                                // スケールダウンかチェック（価格が下がる場合のみ採用）
+                                if (isScaleDown(currentInstance.current_type, recommendedType, currentSection)) {
+                                    currentInstance.recommended_type = recommendedType;
+                                    currentInstance.note = currentInstance.judgment || '過剰スペック';
+                                } else {
+                                    // スケールアップまたは同等の場合は無視
+                                    console.log('Rejected scale-up proposal:', currentInstance.current_type, '->', recommendedType);
+                                    currentInstance.recommended_type = '-';
+                                    currentInstance.note = currentInstance.judgment || '適正';
+                                }
                             } else {
                                 currentInstance.note = currentInstance.judgment || proposal.substring(0, 20);
                             }
@@ -1959,6 +2861,7 @@ def get_html_template():
                     const recs = globalAiRecommendations[section.key] || [];
                     const card = document.createElement('div');
                     card.className = 'resource-card';
+                    card.dataset.sectionKey = section.key;
                     card.innerHTML = `
                         <div class="resource-card-header">
                             <div class="section-title">
@@ -1966,6 +2869,9 @@ def get_html_template():
                                 ${section.title}
                                 <span style="color: var(--text-secondary); font-weight: 400; font-size: 0.9rem;">(${data.length}件)</span>
                             </div>
+                            <button class="copy-btn" onclick="copySectionData('${section.key}', this)" title="データをコピー">
+                                📋 コピー
+                            </button>
                         </div>
                         <div class="resource-card-body">
                             ${createCostTable(data, section.key, recs)}
@@ -2017,6 +2923,169 @@ def get_html_template():
             }
         }
 
+        // SSO 関連のグローバル変数（sessionStorage から復元）
+        let ssoState = null;
+        let currentCredentials = JSON.parse(sessionStorage.getItem('ssoCredentials') || 'null');
+        let currentProfile = sessionStorage.getItem('ssoProfile') || null;
+        
+        // 認証情報を保存する関数
+        function saveCredentials(credentials, profile) {
+            currentCredentials = credentials;
+            currentProfile = profile;
+            if (credentials) {
+                sessionStorage.setItem('ssoCredentials', JSON.stringify(credentials));
+                sessionStorage.setItem('ssoProfile', profile);
+            } else {
+                sessionStorage.removeItem('ssoCredentials');
+                sessionStorage.removeItem('ssoProfile');
+            }
+        }
+        
+        // ログアウト
+        function logout() {
+            saveCredentials(null, null);
+            ssoState = null;
+            document.getElementById('currentProfile').classList.remove('visible');
+            document.getElementById('ssoStatus').classList.remove('visible');
+            showStatus('ログアウトしました', 'success');
+        }
+
+        // プロファイル一覧を読み込み
+        async function loadProfiles() {
+            try {
+                const response = await fetch(window.location.href, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_profiles' })
+                });
+                const data = await response.json();
+                
+                const select = document.getElementById('profileSelect');
+                select.innerHTML = '<option value="">-- アカウントを選択 --</option>';
+                
+                for (const profile of data.profiles) {
+                    const option = document.createElement('option');
+                    option.value = profile.name;
+                    option.textContent = `${profile.name} (${profile.accountId})`;
+                    select.appendChild(option);
+                }
+            } catch (e) {
+                console.error('Failed to load profiles:', e);
+            }
+        }
+
+        // SSO ログイン開始
+        async function startSsoLogin() {
+            const profileSelect = document.getElementById('profileSelect');
+            const profile = profileSelect.value;
+            
+            if (!profile) {
+                alert('アカウントを選択してください');
+                return;
+            }
+            
+            const ssoLoginBtn = document.getElementById('ssoLoginBtn');
+            ssoLoginBtn.disabled = true;
+            
+            try {
+                showStatus('SSO ログインを開始中...', 'loading');
+                
+                const response = await fetch(window.location.href, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'start_sso_login', profile })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // SSO 状態を保存
+                ssoState = {
+                    profile,
+                    clientId: data.clientId,
+                    clientSecret: data.clientSecret,
+                    deviceCode: data.deviceCode
+                };
+                
+                // UI を更新
+                document.getElementById('ssoCode').textContent = data.userCode;
+                document.getElementById('ssoLink').href = data.verificationUriComplete || data.verificationUri;
+                document.getElementById('ssoLink').textContent = data.verificationUri;
+                document.getElementById('ssoStatus').classList.add('visible');
+                
+                hideStatus();
+                
+                // 認証ページを新しいタブで開く
+                window.open(data.verificationUriComplete || data.verificationUri, '_blank');
+                
+            } catch (e) {
+                showStatus('SSO エラー: ' + e.message, 'error');
+            } finally {
+                ssoLoginBtn.disabled = false;
+            }
+        }
+
+        // SSO ログイン完了
+        async function completeSsoLogin() {
+            if (!ssoState) {
+                alert('先に SSO ログインを開始してください');
+                return;
+            }
+            
+            const completeBtn = document.getElementById('completeLoginBtn');
+            completeBtn.disabled = true;
+            
+            try {
+                showStatus('認証を確認中...', 'loading');
+                
+                const response = await fetch(window.location.href, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'complete_sso_login',
+                        profile: ssoState.profile,
+                        clientId: ssoState.clientId,
+                        clientSecret: ssoState.clientSecret,
+                        deviceCode: ssoState.deviceCode
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error === 'authorization_pending') {
+                    showStatus('まだ認証が完了していません。ブラウザで認証を完了してください。', 'error');
+                    completeBtn.disabled = false;
+                    return;
+                }
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // 認証情報を保存（sessionStorage にも保存）
+                console.log('SSO login response:', data);
+                console.log('Credentials received:', data.credentials);
+                saveCredentials(data.credentials, data.profile);
+                console.log('currentCredentials set to:', currentCredentials);
+                
+                // UI を更新
+                document.getElementById('ssoStatus').classList.remove('visible');
+                document.getElementById('currentProfile').classList.add('visible');
+                document.getElementById('currentProfileName').textContent = data.profile;
+                document.getElementById('currentAccountId').textContent = data.accountId;
+                
+                showStatus('✅ ログイン成功！「分析を実行」をクリックしてください。', 'success');
+                
+            } catch (e) {
+                showStatus('認証エラー: ' + e.message, 'error');
+            } finally {
+                completeBtn.disabled = false;
+            }
+        }
+
         async function runAnalysis() {
             const analyzeBtn = document.getElementById('analyzeBtn');
             analyzeBtn.disabled = true;
@@ -2024,12 +3093,30 @@ def get_html_template():
             try {
                 showStatus('AWSリソース情報を収集中...', 'loading');
                 
+                // SSO 認証情報がある場合はそれを使用
+                let requestBody = { action: 'analyze' };
+                console.log('currentCredentials:', currentCredentials);
+                console.log('currentProfile:', currentProfile);
+                
+                if (currentCredentials && currentCredentials.accessKeyId) {
+                    console.log('Using SSO credentials for analysis');
+                    requestBody = {
+                        action: 'analyze_with_credentials',
+                        credentials: currentCredentials,
+                        profile: currentProfile
+                    };
+                } else {
+                    console.log('No SSO credentials, using Lambda role');
+                }
+                
+                console.log('Request body:', JSON.stringify(requestBody));
+                
                 const response = await fetch(window.location.href, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ action: 'analyze' })
+                    body: JSON.stringify(requestBody)
                 });
 
                 if (!response.ok) {
@@ -2041,6 +3128,12 @@ def get_html_template():
                 // MCP から取得した価格データを設定
                 if (data.pricing) {
                     setPricingData(data.pricing);
+                }
+                
+                // MCP から取得した推奨を設定
+                if (data.mcp_recommendations) {
+                    globalMcpRecommendations = data.mcp_recommendations;
+                    console.log('MCP recommendations loaded:', Object.keys(globalMcpRecommendations).length, 'items');
                 }
                 
                 showStatus('リソース情報を表示中...', 'loading');
@@ -2068,13 +3161,165 @@ def get_html_template():
             hideStatus();
         }
 
+        // テキスト形式のリソースデータをオブジェクト形式に変換
+        function parseResourceText(text) {
+            const resources = { ec2: [], rds: [], redis: [], memcache: [], docdb: [] };
+            if (!text) return resources;
+            
+            const lines = text.split('\\n');
+            let currentSection = null;
+            let headers = [];
+            
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+                
+                // セクション判定
+                if (trimmed.startsWith('EC2 :') || trimmed === 'EC2 :') {
+                    currentSection = 'ec2';
+                    headers = [];
+                    continue;
+                } else if (trimmed.startsWith('RDS :') || trimmed === 'RDS :') {
+                    currentSection = 'rds';
+                    headers = [];
+                    continue;
+                } else if (trimmed.startsWith('Redis :') || trimmed === 'Redis :') {
+                    currentSection = 'redis';
+                    headers = [];
+                    continue;
+                } else if (trimmed.startsWith('Memcached :') || trimmed === 'Memcached :') {
+                    currentSection = 'memcache';
+                    headers = [];
+                    continue;
+                } else if (trimmed.startsWith('DocumentDB :') || trimmed === 'DocumentDB :') {
+                    currentSection = 'docdb';
+                    headers = [];
+                    continue;
+                }
+                
+                if (!currentSection) continue;
+                
+                const cols = trimmed.split('\\t');
+                
+                // ヘッダー行
+                if (cols[0] === 'Instance Name' || cols[0] === 'Cluster Name') {
+                    headers = cols;
+                    continue;
+                }
+                
+                if (headers.length === 0 || cols.length < 4) continue;
+                
+                // データ行をパース
+                if (currentSection === 'ec2') {
+                    resources.ec2.push({
+                        name: cols[0] || '',
+                        instance_id: cols[1] || '',
+                        instance_type: cols[2] || '',
+                        count: parseInt(cols[3]) || 1,
+                        ebs_type: cols[4] || '',
+                        ebs_size_gb: parseInt(cols[5]) || 0,
+                        cpu_avg_max: parseFloat(cols[6]) || 0,
+                        cpu_max: parseFloat(cols[7]) || 0,
+                        timestamp: cols[8] || ''
+                    });
+                } else {
+                    // RDS, Redis, Memcache, DocumentDB
+                    resources[currentSection].push({
+                        name: cols[0] || '',
+                        instance_type: cols[1] || '',
+                        count: parseInt(cols[2]) || 1,
+                        cpu_avg_max: parseFloat(cols[3]) || 0,
+                        cpu_max: parseFloat(cols[4]) || 0,
+                        timestamp: cols[5] || ''
+                    });
+                }
+            }
+            
+            return resources;
+        }
+        
+        // URLハッシュからデータを読み取る
+        function loadFromUrlHash() {
+            const hash = window.location.hash;
+            if (!hash || !hash.startsWith('#data=')) {
+                return null;
+            }
+            
+            try {
+                const encoded = hash.substring(6); // '#data=' を削除
+                const jsonStr = atob(encoded);
+                const data = JSON.parse(jsonStr);
+                return data;
+            } catch (e) {
+                console.error('Failed to parse URL hash data:', e);
+                return null;
+            }
+        }
+
         // ページ読み込み時の処理
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Page loaded');
+            
+            // プロファイル一覧を読み込み
+            loadProfiles();
+            
+            // sessionStorage から認証情報を復元した場合、UI を更新
+            if (currentCredentials && currentProfile) {
+                console.log('Restored credentials from sessionStorage for profile:', currentProfile);
+                document.getElementById('currentProfile').classList.add('visible');
+                document.getElementById('currentProfileName').textContent = currentProfile;
+                // accountId は credentials に含まれていないので、profiles から取得する必要がある
+                fetch(window.location.href, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_profiles' })
+                }).then(r => r.json()).then(data => {
+                    const profile = data.profiles.find(p => p.name === currentProfile);
+                    if (profile) {
+                        document.getElementById('currentAccountId').textContent = profile.accountId;
+                    }
+                });
+            }
+            
+            // URLハッシュからデータを読み取り
+            const hashData = loadFromUrlHash();
+            if (hashData) {
+                console.log('Loading data from URL hash:', hashData.profile, hashData.timestamp);
+                
+                // リソーステキストをパース
+                const resources = parseResourceText(hashData.resources);
+                console.log('Parsed resources:', resources);
+                
+                // AI分析結果があればパース
+                let aiRecommendations = null;
+                if (hashData.analysis) {
+                    aiRecommendations = parseAiRecommendations(hashData.analysis);
+                }
+                
+                // 表示
+                renderResources(resources, aiRecommendations);
+                document.getElementById('resultsSection').classList.add('visible');
+                
+                // AI分析結果を表示
+                if (hashData.analysis) {
+                    renderAnalysis(hashData.analysis, hashData.token_usage);
+                }
+                
+                // プロファイル情報を表示
+                if (hashData.profile && hashData.profile !== 'unknown') {
+                    showStatus('プロファイル: ' + hashData.profile + ' (' + (hashData.timestamp || '') + ')', 'success');
+                }
+            }
         });
     </script>
 </body>
 </html>'''
+
+
+# 許可するIPアドレスリスト
+ALLOWED_IPS = [
+    '111.108.92.4',
+]
 
 
 def lambda_handler(event, context):
@@ -2092,6 +3337,16 @@ def lambda_handler(event, context):
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
         'Expires': '0'
+    }
+    
+    # IP制限チェック
+    source_ip = event.get('requestContext', {}).get('http', {}).get('sourceIp', '')
+    if source_ip not in ALLOWED_IPS:
+        print(f"Access denied for IP: {source_ip}")
+        return {
+            'statusCode': 403,
+            'headers': {'Content-Type': 'text/plain'},
+            'body': f'Access denied. Your IP: {source_ip}'
     }
     
     # OPTIONSリクエスト（CORS preflight）
@@ -2124,16 +3379,126 @@ def lambda_handler(event, context):
             if event.get('body'):
                 body = json.loads(event['body']) if isinstance(event['body'], str) else event['body']
             
-            # リソース情報を収集
+            action = body.get('action', 'analyze')
+            print(f"Received action: {action}")
+            print(f"Request body keys: {list(body.keys())}")
+            
+            # SSO ログイン開始
+            if action == 'start_sso_login':
+                profile = body.get('profile')
+                if not profile:
+                    return {
+                        'statusCode': 400,
+                        'headers': headers,
+                        'body': json.dumps({'error': 'profile is required'})
+                    }
+                result = start_sso_login(profile)
+                return {
+                    'statusCode': 200,
+                    'headers': headers,
+                    'body': json.dumps(result, ensure_ascii=False)
+                }
+            
+            # SSO ログイン完了
+            if action == 'complete_sso_login':
+                profile = body.get('profile')
+                client_id = body.get('clientId')
+                client_secret = body.get('clientSecret')
+                device_code = body.get('deviceCode')
+                
+                if not all([profile, client_id, client_secret, device_code]):
+                    return {
+                        'statusCode': 400,
+                        'headers': headers,
+                        'body': json.dumps({'error': 'Missing required parameters'})
+                    }
+                
+                result = complete_sso_login(profile, client_id, client_secret, device_code)
+                return {
+                    'statusCode': 200,
+                    'headers': headers,
+                    'body': json.dumps(result, ensure_ascii=False, default=str)
+                }
+            
+            # SSO プロファイル一覧取得
+            if action == 'get_profiles':
+                profiles = [
+                    {'name': name, 'accountId': profile['sso_account_id']}
+                    for name, profile in SSO_PROFILES.items()
+                ]
+                return {
+                    'statusCode': 200,
+                    'headers': headers,
+                    'body': json.dumps({'profiles': profiles}, ensure_ascii=False)
+                }
+            
+            # ユーザー認証情報を使って分析
+            if action == 'analyze_with_credentials':
+                print("Processing analyze_with_credentials action")
+                credentials = body.get('credentials')
+                profile = body.get('profile', 'unknown')
+                print(f"Profile: {profile}")
+                print(f"Credentials keys: {list(credentials.keys()) if credentials else 'None'}")
+                
+                if not credentials:
+                    return {
+                        'statusCode': 400,
+                        'headers': headers,
+                        'body': json.dumps({'error': 'credentials is required'})
+                    }
+                
+                # ユーザーの認証情報でリソース収集
+                print("Step 1: Collecting resources with credentials...")
+                resources = collect_resources_with_credentials(credentials)
+                print(f"Step 1 done: EC2={len(resources.get('ec2', []))}, RDS={len(resources.get('rds', []))}")
+                
+                # MCP サーバーから価格情報を取得
+                print("Step 2: Collecting pricing info...")
+                pricing_info = collect_pricing_info(resources)
+                print(f"Step 2 done: pricing keys = {list(pricing_info.keys())}")
+                
+                # MCP サーバーから一括スケールダウン提案を取得
+                print("Step 2.5: Getting MCP batch recommendations...")
+                mcp_recommendations = get_mcp_batch_recommendations(resources)
+                print(f"Step 2.5 done: {len(mcp_recommendations)} recommendations")
+                
+                # Bedrock用にフォーマット（価格情報含む）
+                print("Step 3: Formatting for Bedrock...")
+                resource_text = format_resources_for_bedrock(resources, pricing_info)
+                print(f"Step 3 done: text length = {len(resource_text)}")
+                
+                # Bedrockで分析（サマリーのみ使用）
+                print("Step 4: Getting Bedrock analysis...")
+                analysis_result = get_bedrock_analysis(resource_text)
+                print(f"Step 4 done: analysis length = {len(analysis_result.get('text', ''))}")
+                
+                print("Step 5: Preparing response...")
+                return {
+                    'statusCode': 200,
+                    'headers': headers,
+                    'body': json.dumps({
+                        'resources': resources,
+                        'pricing': pricing_info,
+                        'analysis': analysis_result['text'],
+                        'token_usage': analysis_result['token_usage'],
+                        'profile': profile,
+                        'mcp_recommendations': mcp_recommendations
+                    }, ensure_ascii=False, default=str)
+                }
+            
+            # デフォルト: Lambda の IAM ロールでリソース収集
             resources = collect_all_resources()
             
             # MCP サーバーから価格情報を取得
             pricing_info = collect_pricing_info(resources)
             
+            # MCP サーバーから一括スケールダウン提案を取得
+            mcp_recommendations = get_mcp_batch_recommendations(resources)
+            
             # Bedrock用にフォーマット（価格情報含む）
             resource_text = format_resources_for_bedrock(resources, pricing_info)
             
-            # Bedrockで分析
+            # Bedrockで分析（サマリーのみ使用）
             analysis_result = get_bedrock_analysis(resource_text)
             
             return {
@@ -2143,16 +3508,23 @@ def lambda_handler(event, context):
                     'resources': resources,
                     'pricing': pricing_info,
                     'analysis': analysis_result['text'],
-                    'token_usage': analysis_result['token_usage']
+                    'token_usage': analysis_result['token_usage'],
+                    'mcp_recommendations': mcp_recommendations
                 }, ensure_ascii=False, default=str)
             }
             
         except Exception as e:
+            import traceback
+            error_msg = str(e)
+            tb = traceback.format_exc()
+            print(f"ERROR: {error_msg}")
+            print(f"TRACEBACK: {tb}")
             return {
                 'statusCode': 500,
                 'headers': headers,
                 'body': json.dumps({
-                    'error': str(e)
+                    'error': error_msg,
+                    'traceback': tb
                 }, ensure_ascii=False)
             }
     
