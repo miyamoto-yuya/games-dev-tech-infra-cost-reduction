@@ -351,6 +351,14 @@ def collect_resources_with_credentials(credentials: dict, region: str = 'ap-nort
         response = docdb.describe_db_clusters()
         
         for cluster in response.get('DBClusters', []):
+            # DocumentDBのみ対象（RDS Auroraは除外）
+            engine = cluster.get('Engine', '').lower()
+            cluster_id = cluster.get('DBClusterIdentifier', '')
+            if engine != 'docdb':
+                print(f"[DocumentDB] SKIP non-docdb cluster: {cluster_id} (engine='{engine}')")
+                continue
+            
+            print(f"[DocumentDB] INCLUDE: {cluster_id} (engine='{engine}')")
             members = cluster.get('DBClusterMembers', [])
             if members:
                 member_id = members[0].get('DBInstanceIdentifier')
@@ -361,7 +369,7 @@ def collect_resources_with_credentials(credentials: dict, region: str = 'ap-nort
                     session, member_id, 'AWS/DocDB', 'DBInstanceIdentifier'
                 )
                 resources['docdb'].append({
-                    'name': cluster['DBClusterIdentifier'],
+                    'name': cluster_id,
                     'instance_type': inst.get('DBInstanceClass', ''),
                     'count': len(members),
                     'cpu_avg_max': round(cpu_avg_max, 2) if cpu_avg_max is not None else None,
@@ -566,10 +574,23 @@ def call_mcp_tool(tool_name: str, arguments: dict) -> dict:
         content = []
         for chunk in response.get("response", []):
             content.append(chunk.decode('utf-8'))
-        result = json.loads(''.join(content))
+        raw_content = ''.join(content)
+        
+        # デバッグログ
+        print(f"[MCP Debug] Tool: {tool_name}, Raw response length: {len(raw_content)}")
+        
+        result = json.loads(raw_content)
+        
+        # デバッグ: レスポンス構造を確認
+        print(f"[MCP Debug] Response keys: {list(result.keys())}")
         
         if "result" in result and "content" in result["result"]:
-            return json.loads(result["result"]["content"][0]["text"])
+            text_content = result["result"]["content"][0]["text"]
+            print(f"[MCP Debug] Parsed content length: {len(text_content)}")
+            return json.loads(text_content)
+        
+        # エラー詳細をログ出力
+        print(f"[MCP Debug] Unexpected format: {raw_content[:500]}")
         return {"error": "Invalid response format"}
         
     except Exception as e:
@@ -739,16 +760,28 @@ def get_ec2_instances():
 
 
 def get_rds_clusters():
+    """RDS Aurora/MySQLクラスターのみを取得（DocumentDBは除外）"""
     rds = boto3.client("rds")
     clusters_info = []
 
     response = rds.describe_db_clusters()
     cluster_instance_ids = set()
 
-    for cluster in response["DBClusters"]:
-        if cluster["Engine"] == "docdb":
+    # デバッグ: 全クラスターのエンジン名を出力
+    print(f"[RDS] Total clusters from API: {len(response.get('DBClusters', []))}")
+    
+    for cluster in response.get("DBClusters", []):
+        engine = cluster.get("Engine", "").lower()
+        cluster_id = cluster.get("DBClusterIdentifier", "")
+        
+        # DocumentDBは除外（get_docdb_clustersで取得する）
+        # RDS Auroraのエンジン名は "aurora-mysql", "aurora-postgresql" など
+        if engine == "docdb":
+            print(f"[RDS] SKIP DocumentDB: {cluster_id} (engine='{engine}')")
             continue
-        cluster_name = cluster["DBClusterIdentifier"]
+        
+        print(f"[RDS] INCLUDE: {cluster_id} (engine='{engine}')")
+        cluster_name = cluster_id
         node_count = len(cluster["DBClusterMembers"])
 
         instance_types = set()
@@ -760,67 +793,98 @@ def get_rds_clusters():
             instance_types.add(instance_type)
 
         instance_type_display = ", ".join(sorted(instance_types)) if len(instance_types) > 1 else next(iter(instance_types))
-        cpu, ts = get_max_cpu_utilization(cluster_name, namespace='AWS/RDS', dimension_name='DBClusterIdentifier')
+        cpu_data = get_max_cpu_utilization(cluster_name, namespace='AWS/RDS', dimension_name='DBClusterIdentifier')
 
         clusters_info.append({
             "name": cluster_name,
             "instance_type": instance_type_display,
             "count": node_count,
-            "max_cpu": cpu,
-            "max_cpu_time": ts.isoformat() if ts else None
+            "cpu_avg_max": cpu_data.get('cpu_avg_max'),
+            "cpu_max": cpu_data.get('cpu_max'),
+            "max_cpu_time": cpu_data.get('timestamp').isoformat() if cpu_data.get('timestamp') else None
         })
 
+    # スタンドアロンRDSインスタンス（クラスターに属さないもの）
     response = rds.describe_db_instances()
-    for instance in response["DBInstances"]:
+    for instance in response.get("DBInstances", []):
         instance_id = instance["DBInstanceIdentifier"]
         if instance_id in cluster_instance_ids:
             continue
 
-        if instance["Engine"] == "docdb":
+        engine = instance.get("Engine", "").lower()
+        # DocumentDBは除外
+        if engine == "docdb":
+            print(f"[RDS] Skipping DocumentDB instance: {instance_id}")
             continue
 
+        print(f"[RDS] Found standalone instance: {instance_id} (engine={engine})")
         instance_type = instance["DBInstanceClass"]
-        cpu, ts = get_max_cpu_utilization(instance_id, namespace='AWS/RDS', dimension_name='DBInstanceIdentifier')
+        cpu_data = get_max_cpu_utilization(instance_id, namespace='AWS/RDS', dimension_name='DBInstanceIdentifier')
         clusters_info.append({
             "name": instance_id,
             "instance_type": instance_type,
             "count": 1,
-            "max_cpu": cpu,
-            "max_cpu_time": ts.isoformat() if ts else None
+            "cpu_avg_max": cpu_data.get('cpu_avg_max'),
+            "cpu_max": cpu_data.get('cpu_max'),
+            "max_cpu_time": cpu_data.get('timestamp').isoformat() if cpu_data.get('timestamp') else None
         })
 
+    print(f"[RDS] Total clusters/instances found: {len(clusters_info)}")
     return clusters_info
 
 
 def get_docdb_clusters():
-    docdb = boto3.client("docdb")
-    response = docdb.describe_db_clusters()
+    """DocumentDBクラスターのみを取得（RDS Auroraは除外）"""
+    # RDSクライアントを使用（docdbクライアントも同じAPI）
+    rds = boto3.client("rds")
     clusters_info = []
     
-    for cluster in response["DBClusters"]:
-        if cluster["Engine"] != "docdb":
+    response = rds.describe_db_clusters()
+    
+    # デバッグ: 全クラスターのエンジン名を出力
+    print(f"[DocumentDB] Total clusters from API: {len(response.get('DBClusters', []))}")
+    for c in response.get("DBClusters", []):
+        print(f"[DocumentDB DEBUG] Cluster: {c.get('DBClusterIdentifier')} | Engine: '{c.get('Engine')}' | EngineMode: '{c.get('EngineMode', 'N/A')}'")
+    
+    for cluster in response.get("DBClusters", []):
+        engine = cluster.get("Engine", "").lower()
+        cluster_id = cluster.get("DBClusterIdentifier", "")
+        
+        # DocumentDBのみ対象（エンジン名で厳密にフィルタ）
+        # DocumentDBのエンジン名は "docdb"
+        if engine != "docdb":
+            print(f"[DocumentDB] SKIP: {cluster_id} (engine='{engine}' != 'docdb')")
             continue
-        cluster_name = cluster["DBClusterIdentifier"]
+        
+        print(f"[DocumentDB] INCLUDE: {cluster_id} (engine={engine})")
         
         instance_types = set()
-        for member in cluster["DBClusterMembers"]:
+        for member in cluster.get("DBClusterMembers", []):
             db_instance_identifier = member["DBInstanceIdentifier"]
-            db_instance = docdb.describe_db_instances(DBInstanceIdentifier=db_instance_identifier)["DBInstances"][0]
-            instance_type = db_instance["DBInstanceClass"]
-            instance_types.add(instance_type)
+            try:
+                db_instance = rds.describe_db_instances(DBInstanceIdentifier=db_instance_identifier)["DBInstances"][0]
+                instance_type = db_instance["DBInstanceClass"]
+                instance_types.add(instance_type)
+            except Exception as e:
+                print(f"Error getting DocumentDB instance {db_instance_identifier}: {e}")
         
+        if not instance_types:
+            continue
+            
         instance_type_display = ", ".join(sorted(instance_types)) if len(instance_types) > 1 else next(iter(instance_types))
         
-        node_count = len(cluster["DBClusterMembers"])
-        cpu, ts = get_max_cpu_utilization(cluster_name, namespace='AWS/DocDB', dimension_name='DBClusterIdentifier')
+        node_count = len(cluster.get("DBClusterMembers", []))
+        cpu_data = get_max_cpu_utilization(cluster_id, namespace='AWS/DocDB', dimension_name='DBClusterIdentifier')
         clusters_info.append({
-            "name": cluster_name,
+            "name": cluster_id,
             "instance_type": instance_type_display,
             "count": node_count,
-            "max_cpu": cpu,
-            "max_cpu_time": ts.isoformat() if ts else None
+            "cpu_avg_max": cpu_data.get('cpu_avg_max'),
+            "cpu_max": cpu_data.get('cpu_max'),
+            "max_cpu_time": cpu_data.get('timestamp').isoformat() if cpu_data.get('timestamp') else None
         })
     
+    print(f"[DocumentDB] Total clusters found: {len(clusters_info)}")
     return clusters_info
 
 
@@ -834,21 +898,28 @@ def get_redis_clusters():
         instance_type = cluster["CacheNodeType"]
         node_count = len(cluster["MemberClusters"])
 
-        cpu = None
-        ts = None
+        cpu_avg_max = None
+        cpu_max = None
+        max_timestamp = None
         for node_id in cluster["MemberClusters"]:
-            cpu, ts = get_max_cpu_utilization(
+            cpu_data = get_max_cpu_utilization(
                 node_id,
                 namespace='AWS/ElastiCache',
                 dimension_name='CacheClusterId'
             )
+            if cpu_data.get('cpu_avg_max') is not None:
+                if cpu_avg_max is None or cpu_data['cpu_avg_max'] > cpu_avg_max:
+                    cpu_avg_max = cpu_data['cpu_avg_max']
+                    cpu_max = cpu_data.get('cpu_max')
+                    max_timestamp = cpu_data.get('timestamp')
 
         clusters_info.append({
             "name": cluster_name,
             "instance_type": instance_type,
             "count": node_count,
-            "max_cpu": cpu,
-            "max_cpu_time": ts.isoformat() if ts else None
+            "cpu_avg_max": cpu_avg_max,
+            "cpu_max": cpu_max,
+            "max_cpu_time": max_timestamp.isoformat() if max_timestamp else None
         })
 
     return clusters_info
@@ -867,7 +938,7 @@ def get_memcache_clusters():
         instance_type = cluster["CacheNodeType"]
         node_count = cluster["NumCacheNodes"]
         
-        cpu, ts = get_max_cpu_utilization(
+        cpu_data = get_max_cpu_utilization(
             cluster_name,
             namespace='AWS/ElastiCache',
             dimension_name='CacheClusterId'
@@ -877,8 +948,9 @@ def get_memcache_clusters():
             "name": cluster_name,
             "instance_type": instance_type,
             "count": node_count,
-            "max_cpu": cpu,
-            "max_cpu_time": ts.isoformat() if ts else None
+            "cpu_avg_max": cpu_data.get('cpu_avg_max'),
+            "cpu_max": cpu_data.get('cpu_max'),
+            "max_cpu_time": cpu_data.get('timestamp').isoformat() if cpu_data.get('timestamp') else None
         })
 
     return clusters_info
@@ -1009,7 +1081,10 @@ def get_mcp_batch_recommendations(resources):
     
     def get_cpu_avg_max(item):
         if isinstance(item, dict):
-            return item.get("cpu_avg_max") or item.get("max_cpu")
+            cpu = item.get("cpu_avg_max")
+            if cpu is None:
+                cpu = item.get("max_cpu")
+            return cpu
         return None
     
     # EC2
@@ -1017,7 +1092,7 @@ def get_mcp_batch_recommendations(resources):
         if isinstance(item, dict):
             name = item.get("name", "")
             instance_type = item.get("instance_type", "")
-            cpu = item.get("cpu_avg_max") or item.get("max_cpu")
+            cpu = get_cpu_avg_max(item)
             if name and instance_type and cpu is not None:
                 instances.append({
                     "name": name,
@@ -1031,7 +1106,7 @@ def get_mcp_batch_recommendations(resources):
         if isinstance(item, dict):
             name = item.get("name", "")
             instance_type = item.get("instance_type", "")
-            cpu = item.get("cpu_avg_max") or item.get("max_cpu")
+            cpu = get_cpu_avg_max(item)
             if name and instance_type and cpu is not None:
                 instances.append({
                     "name": name,
@@ -1045,7 +1120,7 @@ def get_mcp_batch_recommendations(resources):
         if isinstance(item, dict):
             name = item.get("name", "")
             instance_type = item.get("instance_type", "")
-            cpu = item.get("cpu_avg_max") or item.get("max_cpu")
+            cpu = get_cpu_avg_max(item)
             if name and instance_type and cpu is not None:
                 instances.append({
                     "name": name,
@@ -1060,7 +1135,7 @@ def get_mcp_batch_recommendations(resources):
             if isinstance(item, dict):
                 name = item.get("name", "")
                 instance_type = item.get("instance_type", "")
-                cpu = item.get("cpu_avg_max") or item.get("max_cpu")
+                cpu = get_cpu_avg_max(item)
                 if name and instance_type and cpu is not None:
                     instances.append({
                         "name": name,
@@ -1070,52 +1145,32 @@ def get_mcp_batch_recommendations(resources):
                     })
     
     if not instances:
+        print("No instances with CPU data for MCP batch recommendations")
         return {}
     
-    # MCP呼び出し
+    # AgentCore経由でMCP呼び出し
     try:
-        mcp_endpoint = os.environ.get("MCP_ENDPOINT", "")
-        if not mcp_endpoint:
-            print("MCP_ENDPOINT not configured")
+        print(f"Calling MCP get_batch_recommendations with {len(instances)} instances")
+        result = call_mcp_tool("get_batch_recommendations", {
+            "instances": instances,
+            "region": "ap-northeast-1"
+        })
+        
+        if "error" in result:
+            print(f"MCP batch recommendations error: {result['error']}")
             return {}
         
-        request_body = {
-            "jsonrpc": "2.0",
-            "method": "tools/call",
-            "params": {
-                "name": "get_batch_recommendations",
-                "arguments": {
-                    "instances": instances,
-                    "region": "ap-northeast-1"
-                }
-            },
-            "id": 1
-        }
+        recommendations = result.get("recommendations", [])
         
-        req = urllib.request.Request(
-            mcp_endpoint,
-            data=json.dumps(request_body).encode('utf-8'),
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
+        # 名前をキーにした辞書に変換
+        rec_dict = {}
+        for rec in recommendations:
+            name = rec.get("name", "")
+            if name:
+                rec_dict[name] = rec
         
-        with urllib.request.urlopen(req, timeout=30) as res:
-            response = json.loads(res.read().decode('utf-8'))
-            result = response.get("result", {})
-            content = result.get("content", [])
-            if content and content[0].get("type") == "text":
-                data = json.loads(content[0].get("text", "{}"))
-                recommendations = data.get("recommendations", [])
-                
-                # 名前をキーにした辞書に変換
-                rec_dict = {}
-                for rec in recommendations:
-                    name = rec.get("name", "")
-                    if name:
-                        rec_dict[name] = rec
-                
-                print(f"MCP batch recommendations: {len(rec_dict)} items")
-                return rec_dict
+        print(f"MCP batch recommendations: {len(rec_dict)} items")
+        return rec_dict
     except Exception as e:
         print(f"Error getting MCP batch recommendations: {e}")
     
@@ -1123,7 +1178,7 @@ def get_mcp_batch_recommendations(resources):
 
 
 def collect_pricing_info(resources):
-    """リソースの価格情報を収集（EC2/RDS/ElastiCache/DocDB）- 重複タイプは1回のみ取得"""
+    """リソースの価格情報を収集（EC2/RDS/ElastiCache/DocDB）- 一括取得で高速化"""
     pricing_info = {
         'ec2': {},
         'rds': {},
@@ -1142,7 +1197,10 @@ def collect_pricing_info(resources):
             return item[idx] if len(item) > idx else None
         return None
     
-    # サービスとリソースキーのマッピング
+    # 全インスタンスタイプを収集
+    instance_types_to_fetch = []
+    seen = set()
+    
     service_mapping = [
         ('ec2', 'ec2', resources.get("ec2", []), True),
         ('rds', 'rds', resources.get("rds", []), False),
@@ -1154,10 +1212,32 @@ def collect_pricing_info(resources):
     for service_key, resource_key, items, is_ec2 in service_mapping:
         for item in items:
             instance_type = get_instance_type(item, is_ec2)
-            if instance_type and instance_type not in pricing_info[service_key]:
-                price = get_instance_price_from_mcp(instance_type, service_key)
-                if price > 0:
-                    pricing_info[service_key][instance_type] = price
+            if instance_type and instance_type not in seen:
+                seen.add(instance_type)
+                instance_types_to_fetch.append({
+                    "instance_type": instance_type,
+                    "service": service_key
+                })
+    
+    # MCPサーバーで一括取得
+    if instance_types_to_fetch:
+        try:
+            result = call_mcp_tool("get_batch_prices", {
+                "instance_types": instance_types_to_fetch,
+                "region": "ap-northeast-1"
+            })
+            prices = result.get("prices", {})
+            
+            # 結果をサービス別に振り分け
+            for item in instance_types_to_fetch:
+                instance_type = item["instance_type"]
+                service_key = item["service"]
+                price_info = prices.get(instance_type, {})
+                hourly_price = price_info.get("hourly_price_usd")
+                if hourly_price and hourly_price > 0:
+                    pricing_info[service_key][instance_type] = hourly_price
+        except Exception as e:
+            print(f"Error getting batch prices: {e}")
     
     return pricing_info
 
@@ -1183,21 +1263,21 @@ def get_bedrock_analysis(resource_text):
 
 | CPU AvgMax | 判定 | 提案 |
 |------------|------|------|
-| 50%未満 | 過剰 | 小さいタイプへ変更（コスト削減） |
-| 50%〜70% | 適正 | 変更不要 |
+| 40%未満 | 過剰 | 小さいタイプへ変更（コスト削減） |
+| 40%〜70% | 適正 | 変更不要 |
 | 70%以上 | 不足 | 変更不要（コメントのみ） |
 
-★★★ 重要：目標CPU使用率 50〜70% ★★★
+★★★ 重要：目標CPU使用率 40〜70% ★★★
 - これはコスト削減ツールです
 - スケールダウン（小さいタイプへの変更）のみ提案してください
-- 変更後の予測CPU使用率が50〜70%になるタイプを選んでください
+- 変更後の予測CPU使用率が40〜70%になるタイプを選んでください
 - 予測CPU = 現在CPU × (現在vCPU数 / 提案vCPU数)
 - スペック不足の場合は「変更不要」とし、コメントで「スペック不足」と記載するだけでOK
 
 例：
-- CPU AvgMax = 10% (t3.medium/2vCPU) → 過剰 → t3.micro (1vCPU) へ変更で予測20%...まだ低い → t3.nano (0.5vCPU相当) で予測40%程度
+- CPU AvgMax = 10% (t3.medium/2vCPU) → 過剰 → t3.micro (1vCPU) へ変更で予測20%...まだ低い → t3.nano (0.5vCPU相当) で予測40%程度 → 採用
 - CPU AvgMax = 25% (t3.large/2vCPU) → 過剰 → t3.medium (2vCPU) で予測50%程度 → 採用
-- CPU AvgMax = 55% → 適正 → 変更不要
+- CPU AvgMax = 45% → 適正 → 変更不要
 - CPU AvgMax = 80% → 不足 → 変更不要（コメント：スペック不足）
 
 【出力形式】
@@ -1369,9 +1449,9 @@ def get_html_template():
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1800px;
             margin: 0 auto;
-            padding: 2rem;
+            padding: 1.5rem;
         }
 
         header {
@@ -1736,21 +1816,20 @@ def get_html_template():
         /* コストテーブル（横長） */
         .cost-table-wrapper {
             overflow-x: auto;
-            margin: 0 -1rem;
-            padding: 0 1rem;
+            margin: 0;
+            padding: 0 0.5rem;
         }
         
         .cost-table {
             width: 100%;
-            min-width: 1000px;
             border-collapse: collapse;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem;
+            font-size: 0.7rem;
         }
         
         .cost-table .header-group th {
             background: var(--bg-secondary);
-            padding: 0.6rem 0.8rem;
+            padding: 0.3rem 0.4rem;
             text-align: center;
             font-weight: 600;
             color: var(--text-primary);
@@ -1765,26 +1844,29 @@ def get_html_template():
         .cost-table .header-group .group-current {
             background: rgba(34, 211, 238, 0.2);
             color: var(--accent-cyan);
-            border-left: 3px solid var(--accent-cyan);
-            font-size: 0.9rem;
+            border-left: 2px solid var(--accent-cyan);
+            font-size: 0.75rem;
         }
         
         .cost-table .header-group .group-recommend {
             background: rgba(74, 222, 128, 0.2);
             color: var(--accent-green);
-            border-left: 3px solid var(--accent-green);
-            font-size: 0.9rem;
+            border-left: 2px solid var(--accent-green);
+            font-size: 0.75rem;
         }
         
         .cost-table .header-group .group-cpu {
             background: rgba(251, 146, 60, 0.2);
             color: var(--accent-orange);
-            border-left: 3px solid var(--accent-orange);
-            font-size: 0.9rem;
+            border-left: 2px solid var(--accent-orange);
+            font-size: 0.75rem;
         }
         
         .cost-table .header-group .group-comment {
             background: var(--bg-secondary);
+            position: sticky;
+            right: 0;
+            box-shadow: -2px 0 4px rgba(0,0,0,0.3);
         }
         
         .cost-table .cpu-section {
@@ -1793,17 +1875,17 @@ def get_html_template():
         
         .cost-table .header-detail th {
             background: var(--bg-secondary);
-            padding: 0.5rem 0.6rem;
+            padding: 0.25rem 0.3rem;
             text-align: center;
             font-weight: 500;
-            font-size: 0.75rem;
+            font-size: 0.65rem;
             color: var(--text-secondary);
             border-bottom: 2px solid var(--border-color);
             white-space: nowrap;
         }
         
         .cost-table td {
-            padding: 0.6rem 0.8rem;
+            padding: 0.35rem 0.4rem;
             border-bottom: 1px solid var(--border-color);
             text-align: center;
         }
@@ -1816,8 +1898,10 @@ def get_html_template():
             text-align: left;
             font-weight: 500;
             color: var(--text-primary);
-            max-width: 200px;
+            max-width: 130px;
             overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         
         .cost-table .group-badge {
@@ -1882,12 +1966,20 @@ def get_html_template():
         
         .cost-table .ai-comment-cell {
             text-align: left;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             color: var(--text-secondary);
-            max-width: 150px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            min-width: 100px;
+            max-width: 130px;
+            white-space: normal;
+            word-break: break-word;
+            position: sticky;
+            right: 0;
+            background: var(--bg-primary);
+            box-shadow: -2px 0 4px rgba(0,0,0,0.3);
+        }
+        
+        .cost-table tr:hover .ai-comment-cell {
+            background: var(--bg-secondary);
         }
         
         /* セクション区切り */
@@ -1957,7 +2049,7 @@ def get_html_template():
         }
 
         .resource-card-header {
-            padding: 1rem 1.5rem;
+            padding: 0.75rem 1rem;
             border-bottom: 1px solid var(--border-color);
             background: var(--bg-secondary);
             display: flex;
@@ -2250,14 +2342,14 @@ def get_html_template():
                     recCount = count;  // 台数は現状と同じ
                 }
                 
-                // 行を作成: インスタンス名, インスタンスID, サイズ, 台数, (EBS), (月額), (合計), 提案サイズ, 提案台数
+                // 行を作成: インスタンス名, インスタンスID, サイズ, 台数, (EBS), (月額), (合計), (空), (空), 提案サイズ, 提案台数
                 // EBS・月額・合計は計算式なので空欄でスキップ
                 let row;
                 if (isEc2) {
-                    row = `${name}\\t${instanceId}\\t${instanceType}\\t${count}\\t\\t\\t\\t${recType}\\t${recCount}`;
+                    row = `${name}\\t${instanceId}\\t${instanceType}\\t${count}\\t\\t\\t\\t\\t\\t${recType}\\t${recCount}`;
                 } else {
                     // RDS/DocDB/ElastiCacheはIDがないので空欄
-                    row = `${name}\\t\\t${instanceType}\\t${count}\\t\\t\\t\\t${recType}\\t${recCount}`;
+                    row = `${name}\\t\\t${instanceType}\\t${count}\\t\\t\\t\\t\\t\\t${recType}\\t${recCount}`;
                 }
                 rows.push(row);
             });
@@ -2315,18 +2407,18 @@ def get_html_template():
             'c5': 'large', 'c5a': 'large', 'c5n': 'large', 'c6i': 'large', 'c6a': 'large', 'c6g': 'large', 'c7g': 'large',
             'm5': 'large', 'm5a': 'large', 'm5n': 'large', 'm6i': 'large', 'm6a': 'large', 'm6g': 'large', 'm7g': 'large',
             'r5': 'large', 'r5a': 'large', 'r5n': 'large', 'r6i': 'large', 'r6a': 'large', 'r6g': 'large', 'r7g': 'large',
-            // T系は nano が最小
+            // EC2 T系は nano が最小
             't3': 'nano', 't3a': 'nano', 't4g': 'nano',
-            // RDS
+            // RDS/DocumentDB - R/M系は large が最小、T系は medium が最小
             'db.r5': 'large', 'db.r6g': 'large', 'db.m5': 'large', 'db.m6g': 'large',
-            'db.t3': 'micro', 'db.t4g': 'micro',
-            // ElastiCache
+            'db.t3': 'medium', 'db.t4g': 'medium',
+            // ElastiCache - R/M系は large が最小、T系は micro が最小
             'cache.r5': 'large', 'cache.r6g': 'large', 'cache.m5': 'large', 'cache.m6g': 'large',
             'cache.t3': 'micro', 'cache.t4g': 'micro',
         };
         
         function calculateAutoScaleDown(instanceType, cpuAvgMax, service = 'ec2') {
-            if (!instanceType || cpuAvgMax === null || cpuAvgMax >= 50) {
+            if (!instanceType || cpuAvgMax === null || cpuAvgMax >= 40) {
                 return null;  // 過剰スペックでない場合は提案しない
             }
             
@@ -2370,11 +2462,11 @@ def get_html_template():
                         predictedCpu: predictedCpu,
                         price: candidatePrice
                     };
-                    // 予測CPUが50-70%なら理想的なのでここで終了
-                    if (predictedCpu >= 50) {
+                    // 予測CPUが40-70%なら理想的なのでここで終了
+                    if (predictedCpu >= 40) {
                         break;
                     }
-                    // 50%未満でも続けて、より小さいサイズを探す
+                    // 40%未満でも続けて、より小さいサイズを探す
                 } else if (predictedCpu > 70) {
                     // これ以上小さくするとCPU高すぎ、前の候補を使う
                     break;
@@ -2530,9 +2622,9 @@ def get_html_template():
                 let actualSavings = null;
                 let actualAiComment = '-';
                 
-                // CPU値に基づいて正しい判定を決定
+                // CPU値に基づいて正しい判定を決定（40-70%が適正）
                 if (cpuAvgMax !== null && cpuAvgMax !== undefined) {
-                    if (cpuAvgMax < 50) {
+                    if (cpuAvgMax < 40) {
                         actualAiComment = '過剰スペック';
                     } else if (cpuAvgMax <= 70) {
                         actualAiComment = '適正';
@@ -2562,7 +2654,7 @@ def get_html_template():
                     }
                     
                     // コメント設定
-                    actualAiComment = mcpRec.reason || (predictedCpuAvg >= 50 ? '変更推奨' : '過剰（更に削減余地あり）');
+                    actualAiComment = mcpRec.reason || (predictedCpuAvg >= 40 ? '変更推奨' : '過剰（更に削減余地あり）');
                     console.log('Using MCP recommendation:', name, instanceType, '->', actualRecType, 'predicted:', predictedCpuAvg + '%');
                 }
                 // 2. MCPに提案がなく、reasonがある場合はそれを表示
@@ -2604,13 +2696,13 @@ def get_html_template():
                                 const recPrice = getInstancePrice(actualRecType, service);
                                 actualRecMonthly = recPrice * HOURS_PER_MONTH * count + monthlyEbs;
                                 actualSavings = monthlyTotal - actualRecMonthly;
-                                actualAiComment = predictedCpuAvg >= 50 ? '変更推奨' : '過剰（更に削減余地あり）';
+                                actualAiComment = predictedCpuAvg >= 40 ? '変更推奨' : '過剰（更に削減余地あり）';
                             }
                         }
                     }
                 }
                 // 4. ローカル自動計算（最終フォールバック）
-                else if (cpuAvgMax !== null && cpuAvgMax < 50) {
+                else if (cpuAvgMax !== null && cpuAvgMax < 40) {
                     const autoRec = calculateAutoScaleDown(instanceType, cpuAvgMax, service);
                     if (autoRec) {
                         actualRecType = autoRec.type;
@@ -2622,7 +2714,7 @@ def get_html_template():
                             const ratio = getInstanceSizeRatio(instanceType, autoRec.type);
                             if (ratio) predictedCpuMax = Math.min(cpuMax * ratio, 100);
                         }
-                        actualAiComment = predictedCpuAvg >= 50 ? '変更推奨（ローカル計算）' : '過剰（更に削減余地あり）';
+                        actualAiComment = predictedCpuAvg >= 40 ? '変更推奨（ローカル計算）' : '過剰（更に削減余地あり）';
                         console.log('Using local auto-calculation:', instanceType, '->', autoRec.type);
                     } else {
                         // 自動計算でも提案がない場合は最小構成の可能性
@@ -2634,7 +2726,7 @@ def get_html_template():
                 }
                 
                 // 最小構成チェック（MCPやBedrockで提案がない場合）
-                if (actualRecType === '-' && (cpuAvgMax === null || cpuAvgMax < 50)) {
+                if (actualRecType === '-' && (cpuAvgMax === null || cpuAvgMax < 40)) {
                     const sizePart = instanceType.split('.').pop();
                     // ファミリー別の最小サイズ判定
                     const isMinSize = (() => {
@@ -2642,12 +2734,20 @@ def get_html_template():
                         if (instanceType.match(/^(db\.|cache\.)(r|m)\d+g?\./)) {
                             return sizePart === 'large';
                         }
+                        // RDS/DocumentDB T系は medium が最小
+                        if (instanceType.match(/^db\.t\d+g?\./)) {
+                            return sizePart === 'medium';
+                        }
+                        // ElastiCache T系は micro が最小
+                        if (instanceType.match(/^cache\.t\d+g?\./)) {
+                            return sizePart === 'micro';
+                        }
                         // EC2 c系, m系, r系 は large が最小
                         if (instanceType.match(/^(c5|c5a|c5n|c6|c7|m5|m5a|m6|m7|r5|r5a|r6|r7)/)) {
                             return sizePart === 'large';
                         }
-                        // t系は nano が最小
-                        return sizePart === 'nano' || sizePart === 'micro';
+                        // EC2 t系は nano が最小
+                        return sizePart === 'nano';
                     })();
                     
                     if (isMinSize) {
@@ -2655,6 +2755,9 @@ def get_html_template():
                     } else if (cpuAvgMax === null) {
                         // CPUデータなし
                         actualAiComment = 'CPU取得不可';
+                    } else if (cpuAvgMax < 40) {
+                        // CPU < 40%だが、スケールダウンするとCPU超過のため提案なし
+                        actualAiComment = 'スケールダウン候補なし';
                     }
                 }
                 
@@ -2688,12 +2791,13 @@ def get_html_template():
                 html += `<td class="recommend-section type-cell">${actualRecType}</td>`;
                 html += `<td class="recommend-section money-cell">${actualRecMonthly !== null ? formatMoney(actualRecMonthly) : '-'}</td>`;
                 html += `<td class="recommend-section section-border-right savings-cell ${actualSavings > 0 ? 'positive' : ''}">${actualSavings !== null && actualSavings > 0 ? '-' + formatMoney(actualSavings) + '/月' : '-'}</td>`;
-                // CPU使用率セクション（変更提案がある場合のみ表示）
-                const showCpu = actualRecType !== '-';
-                html += `<td class="cpu-section">${showCpu ? `<span class="cpu-badge ${getCpuClass(cpuAvgMax)}">${formatCpu(cpuAvgMax)}</span>` : '-'}</td>`;
-                html += `<td class="cpu-section">${showCpu ? `<span class="cpu-badge ${getCpuClass(cpuMax)}">${formatCpu(cpuMax)}</span>` : '-'}</td>`;
-                html += `<td class="cpu-section">${showCpu && predictedCpuAvg !== null ? `<span class="cpu-badge ${getCpuClass(predictedCpuAvg)} predicted">~${predictedCpuAvg.toFixed(1)}%</span>` : '-'}</td>`;
-                html += `<td class="cpu-section section-border-right">${showCpu && predictedCpuMax !== null ? `<span class="cpu-badge ${getCpuClass(predictedCpuMax)} predicted">~${predictedCpuMax.toFixed(1)}%</span>` : '-'}</td>`;
+                // CPU使用率セクション（AvgMax/Maxは常に表示、予測値は提案がある場合のみ）
+                const hasCpuData = cpuAvgMax !== null && cpuAvgMax !== undefined;
+                const showPredicted = actualRecType !== '-';
+                html += `<td class="cpu-section">${hasCpuData ? `<span class="cpu-badge ${getCpuClass(cpuAvgMax)}">${formatCpu(cpuAvgMax)}</span>` : '-'}</td>`;
+                html += `<td class="cpu-section">${hasCpuData && cpuMax !== null ? `<span class="cpu-badge ${getCpuClass(cpuMax)}">${formatCpu(cpuMax)}</span>` : '-'}</td>`;
+                html += `<td class="cpu-section">${showPredicted && predictedCpuAvg !== null ? `<span class="cpu-badge ${getCpuClass(predictedCpuAvg)} predicted">~${predictedCpuAvg.toFixed(1)}%</span>` : '-'}</td>`;
+                html += `<td class="cpu-section section-border-right">${showPredicted && predictedCpuMax !== null ? `<span class="cpu-badge ${getCpuClass(predictedCpuMax)} predicted">~${predictedCpuMax.toFixed(1)}%</span>` : '-'}</td>`;
                 // AIコメント
                 html += `<td class="ai-comment-cell">${actualAiComment}</td>`;
                 html += '</tr>';
